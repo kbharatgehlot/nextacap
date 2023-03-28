@@ -451,8 +451,8 @@ process sagecalStandalone {
 
     script:
     """
-    echo "done"
-    #pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    #echo "done"
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
 
