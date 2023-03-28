@@ -33,15 +33,15 @@ process convertSageSolutions {
     val stage_number
 
     output:
-        path("${obsid}.npz"), emit: npz
-        path("${obsid}.npy"), emit: npy
+        val("${obsid}.npz"), emit: npz
+        val("${obsid}.npy"), emit: npy
         val(true), emit: ready
         
     script:
     allnodes = nodes.split(",").collect{"node${it}"}.join(" ")
     logs = "${params.logs_dir}/convert_sols.log"
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 "mkdir -p ${solsdir}; mv ${datapath}/${ms_pattern}.solutions ${solsdir}"
+    #pssh -v -i -h ${pssh_hosts_txt_file} -t 0 "mkdir -p ${solsdir}; mv ${datapath}/${ms_pattern}.solutions ${solsdir}"
 
     python3 ${projectDir}/templates/convert_sage_solutions.py -o ${obsid} -m ${datapath}/*.MS -p ${solsdir} -d \${PWD} -n ${allnodes} -c 0 2000 --eff_nr ${eff_nr_file} --pid ${stage_number} > ${logs}
     mv *.npz *.npy ${solsdir}
@@ -81,8 +81,8 @@ process plotDDSageSols {
     errorStrategy 'ignore'
 
     input:
-    path sols_npy
-    path sols_npz
+    val sols_npy
+    val sols_npz
     path eff_nr_file
     val obsid
     val solsdir
@@ -96,7 +96,7 @@ process plotDDSageSols {
     script:
     logs = "${params.logs_dir}/plot_dd_sols_${obsid}.log"
     """
-    python3 ${projectDir}/templates/plot_dd_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} ${sols_npy} --eff_nr ${eff_nr_file} > ${logs} 2>&1
+    python3 ${projectDir}/templates/plot_dd_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} ${solsdir}/${sols_npy} --eff_nr ${eff_nr_file} > ${logs} 2>&1
     """
 }
 
@@ -106,8 +106,8 @@ process plotDISageSols {
     errorStrategy 'ignore'
 
     input:
-    path sols_npy
-    path sols_npz
+    val sols_npy
+    val sols_npz
     path eff_nr_file
     val obsid
     val solsdir
@@ -121,7 +121,7 @@ process plotDISageSols {
     script:
     logs = "${params.logs_dir}/plot_di_sols_${obsid}.log"
     """
-    python3 ${projectDir}/templates/plot_di_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} --cluster 0 ${sols_npy} > ${logs} 2>&1
+    python3 ${projectDir}/templates/plot_di_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} --cluster 0 ${solsdir}/${sols_npy} > ${logs} 2>&1
     """
 }
 

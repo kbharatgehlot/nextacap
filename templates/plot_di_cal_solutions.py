@@ -36,7 +36,7 @@ parser.add_argument("--cluster", help="Cluster index", default=0, type=int)
 parser.add_argument("--out_dir", help="Output directory", default=".")
 parser.add_argument("--out_prefix", help="Prefix to the output filename", default="")
 
-station_pairs = [(0, 1), (5, 8), (15, 18), (36, 39), (52, 55), (55, 60)]
+station_pairs = [(0, 1), (5, 8), (15, 18), (36, 39), (52, 55), (55, 59)]
 
 
 class ColorbarInnerPosition(object):
@@ -177,6 +177,7 @@ def plot_abs_and_phase(freqs, d, pols, out_dir, prefix):
     if myvmax == myvmin:
         myvmax = 10 * myvmin
     for i, (s1, s2) in enumerate(station_pairs):
+        print(d.shape)
         g1 = d[:, s1]
         g2 = d[:, s2]
 
@@ -306,6 +307,8 @@ def main():
     print("Reading %s ..." % sol_file)
     data = np.load(sol_file)
     meta_data = np.load(meta_file_file)
+
+    # print("# stations", len(meta_data["stations"]))
 
     freqs = meta_data["freqs"] * 1e-6
     idx_freqs = (freqs >= args.fmin) & (freqs <= args.fmax)

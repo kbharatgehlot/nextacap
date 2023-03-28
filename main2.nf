@@ -96,6 +96,7 @@ workflow {
 
 workflow init {
     VET_PARAMS()
+    SET_NODES(VET_PARAMS.out)
 }
 
 
@@ -164,9 +165,11 @@ workflow SAGECAL_MPI_DI {
         gen_002_ready
 
      main:
-        cp_ch = getModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path)
+
+        cp_ch = getModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
+
         di_preprocess_ch = preProcess_di(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002)
-        sage_mpi_di_ch = sagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path)
+        sage_mpi_di_ch = sagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
 
         eff_ch = makeEffNr(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
 
@@ -217,7 +220,7 @@ workflow SAGECAL_MPI_DD {
         //  the di run already copied the models so no need to copy again
         // cp_ch = getModels(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.mpi_dd.sky_model, params.mpi_dd.clusters_file, params.mpi_dd.admm_rho_file, params.shapelets.modes, params.data.path)
         dd_preprocess_ch = preProcess_dd(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003)
-        sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path)
+        sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
     emit:
         sagecalMPI.out
 }
@@ -296,6 +299,8 @@ process savingParams {
 
 
 process mpirunNodesList {
+    // publishDir params.logs_dir
+
     input:
     val ready
     val nodes
@@ -313,7 +318,8 @@ process mpirunNodesList {
 
 
 process psshNodesList {
-    // debug true
+    debug true
+    // publishDir params.logs_dir
 
     input:
     val ready
@@ -340,11 +346,19 @@ process getModels {
     path pssh_hosts_txt_file
     val shapelets_modes
     val datapath
+    val sim
 
     output:
     val true
 
     script:
+    if (sim)
+
+    """
+    echo "Info: We assume the simulation does not need the NCP shapelets model. Shout if otherwise!"
+    """
+
+    else
 
     """
     pssh -v -i -h ${pssh_hosts_txt_file} -t 0 cp ${shapelets_modes} ${datapath} > ${params.logs_dir}/models_copying.log 2>&1
@@ -463,6 +477,9 @@ process sagecalMPI {
     val ready
     val sagecal_command
     val datapath
+    val pssh_hosts_txt_file
+    val solsdir
+    val ms_pattern
 
     output:
     val true , emit: sagecal_complete
@@ -472,7 +489,8 @@ process sagecalMPI {
     //when done we remove the many shapelets .modes files
     """
     cd ${datapath}
-    ${sagecal_command}
+    time ${sagecal_command}
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 "mkdir -p ${solsdir}; mv ${datapath}/${ms_pattern}.solutions ${solsdir}"
     #rm *.modes
     """
     //the rm modes should give the absolute path
