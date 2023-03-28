@@ -175,8 +175,7 @@ workflow SAGECAL_MPI_DI {
         convertSageZSol(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
         plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
     emit:
-        // plotDISageSols.out
-        true
+        plotDISageSols.out
 }
 
 
@@ -194,8 +193,7 @@ workflow SAGECAL_BANDPASS {
         plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
 
     emit:
-        // plotDISageSols.out
-        true
+        plotDISageSols.out
 }
 
 
@@ -216,6 +214,7 @@ workflow SAGECAL_MPI_DD {
         gen_003_complete
 
      main:
+        //  the di run already copied the models so no need to copy again
         // cp_ch = getModels(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.mpi_dd.sky_model, params.mpi_dd.clusters_file, params.mpi_dd.admm_rho_file, params.shapelets.modes, params.data.path)
         dd_preprocess_ch = preProcess_dd(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003)
         sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path)
@@ -451,7 +450,6 @@ process sagecalStandalone {
 
     script:
     """
-    #echo "done"
     pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
@@ -473,10 +471,9 @@ process sagecalMPI {
     script:
     //when done we remove the many shapelets .modes files
     """
-    echo "done"
-    #cd ${datapath}
-    #${sagecal_command}
-    #rm *.modes 
+    cd ${datapath}
+    ${sagecal_command}
+    #rm *.modes
     """
     //the rm modes should give the absolute path
 }
