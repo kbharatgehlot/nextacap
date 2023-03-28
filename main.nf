@@ -16,13 +16,12 @@ include {
     plotPS;
 } from './modules/power_spectra.nf'
 
-params.obsid = "L254871"
+// params.obsid = null // "L254871"
 params.nodes = "125,126,127,128,129" //"125,126,117,128,129,130,131"
 params.slots = 4 //TODO: determine this automatically from given nodes.
 params.datapath = "/data/users/lofareor/chege/leap_tests/leaptest_mpi"  //"/data/users/lofareor/chege/spatial_reg_test/1hour/spectral/L254871" ////"/home/users/chege/theleap/pipe/testdir" //"/data/users/lofareor/chege/leap_tests/bandpass" //
 params.label="R" //"2022" //"R" //
 params.redshift=1
-params.timechunks = 1
 params.msfiles= "ms_files.txt"
 params.all_msets_txt_list = "${params.datapath}/all_ms_files.txt"
 params.mpirun_hosts_txt_file = "${launchDir}/mpirun_hosts_list.txt" // nodes host filename for mpirun #${params.datapath}
@@ -77,6 +76,7 @@ workflow {
     //save them in a json file for modification if needed and for posterity
     VET_PARAMS()
 
+
     //Generate mpirun and pssh hosts files
     SET_NODES(VET_PARAMS.out)
 
@@ -84,13 +84,16 @@ workflow {
     SAGECAL(SET_NODES.out[0], SET_NODES.out[1])
 
     //Convert sagecal gains outputs and make diagnostic plots
-    ANALYSE_GAINS(SAGECAL.out)
+    // ANALYSE_GAINS(SAGECAL.out)
 
-    //Make power spectra using PSPIPE
+    // Make power spectra using PSPIPE
     POWER_SPECTRUM(SAGECAL.out)
 
 }
 
+workflow init {
+    VET_PARAMS()
+}
 
 workflow VET_PARAMS {
     main:
@@ -109,6 +112,11 @@ workflow VET_PARAMS {
         if (params.verbose){
             paramsInfo()
         }
+
+        // if (params.init) {
+        //     log.info("exiting")
+        //     exit 0
+        // }
 
     emit:
         savingParams.out.params_json_written
@@ -135,7 +143,6 @@ workflow SET_NODES {
 }
 
 
-
 workflow SAGECAL {
     take:
         all_nodes_standby
@@ -154,9 +161,14 @@ workflow SAGECAL {
 
             cp_ch = getModels(all_nodes_standby, pssh_hosts_txt, params.sky_model, params.clusters_file, params.admm_rho_file, params.shapelets_modes, params.datapath)
 
-            preprocess_ch = preProcess(cp_ch, pssh_hosts_txt, params.preprocessing_file, params.datapath, params.msfiles)
-
-            sagecalMPI(preprocess_ch.collect(), params.sagecal_command, params.datapath)
+            //if its a simulation we do not need any preprocessing
+            if (params.sim){
+                sagecalMPI(cp_ch, params.sagecal_command, params.datapath)
+            }
+            else{
+                preprocess_ch = preProcess(cp_ch, pssh_hosts_txt, params.preprocessing_file, params.datapath, params.msfiles)
+                sagecalMPI(preprocess_ch.collect(), params.sagecal_command, params.datapath)
+            }
 
             sage_ch = sagecalMPI.out
         }
@@ -232,7 +244,7 @@ process savingParams {
     val all_params_valid
 
     output:
-        path 'params.json'
+        file 'params.json'
         val true, emit: params_json_written
 
     script:
@@ -379,7 +391,7 @@ def checkParams() {
     //check obsid and nodes
     assert params.datapath : log.error("Error:'--datapath' needed")
     assert params.nodes : log.error("Error: Please provide a comma separated string of nodes. Try --nodes '100,101,102,103,104'")
-    assert params.obsid : log.error("Error: Please provide an obsid for proper namings. Try --obsid 'your_obsid'")
+    // assert params.obsid : log.error("Error: Please provide an obsid for proper namings. Try --obsid 'your_obsid'")
     assert ["standalone", "mpi"].contains(params.mode) : log.error("Error: Unknown sagecal mode: ${params.mode}. Can only be either 'mpi' or 'standalone'")
 
     if (params.mode == "mpi"){
@@ -430,6 +442,9 @@ def checkMSNaming() {
     else {
         println("${params.obsid}, ${params.stage_number}, ${params.label}. Not following default naming convention")
         assert params.ms_pattern : log.error("'--ms_pattern' needed") //MS pattern to search for
+        params.obsid = "lorem_ipsum"
+        params.solsdir = "${params.datapath}/sagecal_solutions"
+        params.logfile = "sagecal.log" // sagecal output log file
     }
     return params.ms_pattern
 }
@@ -464,7 +479,7 @@ def checkDataDistribution(nodes_list) {
     params.ms_files_per_node  = [:] // A map to populate the ms files in each node
     params.sub_bands_per_node = [:] //A map to populate the subband numbers of the files in each node
 
-    def isSubBand = { it.toString().split("_")[-4].split("SB")[1].toInteger()}
+    // def isSubBand = { it.toString().split("_")[-4].split("SB")[1].toInteger()}
     def isMS = { it.toString().split("/")[-1] }
 
     all_msets = []
@@ -474,7 +489,7 @@ def checkDataDistribution(nodes_list) {
         all_msets.addAll(list_of_msets)
 
         params.ms_files_per_node."${node}" = list_of_msets.collect(isMS)
-        params.sub_bands_per_node."${node}" = list_of_msets.collect(isSubBand)
+        // params.sub_bands_per_node."${node}" = list_of_msets.collect(isSubBand)
 
         //write out a txt file per node with the msets in that node 
         msets_txt_file = "${fullpath}/${params.msfiles}"
@@ -589,7 +604,11 @@ def paramsInfo(){
 
 
 def make_sagecal_command() {
-
+    if (params.sagecal_command) {
+        log.info("using user provided sagecal command")
+        return params.sagecal_command
+    }
+    else{
             String sage_command =  """
 -s ${params.sky_model} \
 -F ${params.sky_model_format} \
@@ -623,13 +642,15 @@ def make_sagecal_command() {
         mpi_command = make_mpi_command()
 
         command = mpi_command + " " +  sage_command
-
+        command= command.stripIndent()
     }
 
     else if (params.mode == "standalone"){
         command = "sagecal_gpu " + sage_command.strip() + " -k ${params.cluster_id} -a ${params.action} "
+        command= command.stripIndent()
     }
-    return command.stripIndent()
+    return command
+    }
 }
 
 

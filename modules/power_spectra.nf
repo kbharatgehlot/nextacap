@@ -106,6 +106,7 @@ process runPSPIPE {
     '''
 }
 
+
 process plotPS {
     publishDir "${params.datapath}/ps"
 

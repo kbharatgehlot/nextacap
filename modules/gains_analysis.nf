@@ -1,7 +1,8 @@
 #!/usr/bin/env nextflow
 
 process makeEffNr {
-    publishDir params.outdir
+    publishDir params.data.path
+    errorStrategy 'ignore'
 
     input:
     val ready
@@ -18,7 +19,8 @@ process makeEffNr {
 
 process convertSageSolutions {
     debug true
-    publishDir params.outdir
+    publishDir params.data.path
+    errorStrategy 'ignore'
 
     input:
     path eff_nr_file
@@ -37,20 +39,20 @@ process convertSageSolutions {
         
     script:
     allnodes = nodes.split(",").collect{"node${it}"}.join(" ")
-    logs = "convert_sols.log"
+    logs = "${params.logs_dir}/convert_sols.log"
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} "mkdir -p ${solsdir}; cp ${datapath}/${ms_pattern}.solutions ${solsdir}"
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 "mkdir -p ${solsdir}; mv ${datapath}/${ms_pattern}.solutions ${solsdir}"
 
     python3 ${projectDir}/templates/convert_sage_solutions.py -o ${obsid} -m ${datapath}/*.MS -p ${solsdir} -d \${PWD} -n ${allnodes} -c 0 2000 --eff_nr ${eff_nr_file} --pid ${stage_number} > ${logs}
-    cp *.npz *.npy ${solsdir}
+    mv *.npz *.npy ${solsdir}
     """
-
 }
 
 
 process convertSageZSol {
     debug true
-    publishDir params.outdir
+    publishDir params.data.path
+    errorStrategy 'ignore'
 
     input:
     val ready
@@ -63,11 +65,11 @@ process convertSageZSol {
         path "${obsid}_zsol", optional: true
 
     script:
-    logs = "convert_Zsols_${obsid}.log"
+    logs = "${params.logs_dir}/convert_Zsols_${obsid}.log"
     """
-    cp ${datapath}/*Zsol ${solsdir}
+    mv ${datapath}/*Zsol ${solsdir}
 
-    python3 ${projectDir}/templates/convert_sage_zsol.py --output_name ${obsid}_zsol --eff_nr ${eff_nr_file} ${solsdir}/${obsid}_Zsol ${solsdir}/${obsid}.npz > ${logs} 2>&1
+    python3 ${projectDir}/templates/convert_sage_zsol.py --output_name ${obsid}_zsol --eff_nr ${eff_nr_file} ${solsdir}/sagecal_Zsol ${solsdir}/${obsid}.npz > ${logs} 2>&1
 
     """
 }
@@ -75,7 +77,8 @@ process convertSageZSol {
 
 process plotDDSageSols {
     debug true
-    publishDir params.outdir
+    publishDir params.data.path
+    errorStrategy 'ignore'
 
     input:
     path sols_npy
@@ -91,7 +94,7 @@ process plotDDSageSols {
         val true
 
     script:
-    logs = "plot_dd_sols_${obsid}.log"
+    logs = "${params.logs_dir}/plot_dd_sols_${obsid}.log"
     """
     python3 ${projectDir}/templates/plot_dd_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} ${sols_npy} --eff_nr ${eff_nr_file} > ${logs} 2>&1
     """
@@ -99,7 +102,8 @@ process plotDDSageSols {
 
 process plotDISageSols {
     debug true
-    publishDir params.outdir
+    publishDir params.data.path
+    errorStrategy 'ignore'
 
     input:
     path sols_npy
@@ -115,7 +119,7 @@ process plotDISageSols {
         val true
 
     script:
-    logs = "plot_di_sols_${obsid}.log"
+    logs = "${params.logs_dir}/plot_di_sols_${obsid}.log"
     """
     python3 ${projectDir}/templates/plot_di_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} --cluster 0 ${sols_npy} > ${logs} 2>&1
     """

@@ -1,6 +1,7 @@
 #!/usr/bin/env nextflow
 
-params.outdir = "${launchDir}"
+// params.outdir = "${launchDir}"
+params.ms_files = null
 
 process clipData {
     debug true
@@ -18,8 +19,8 @@ process clipData {
 }
 
 workflow {
-    _ = file(params.msfiles, glob: false, checkIfExists: true) //check it exists
-    def msetsList = new File(params.msfiles).collect {it}
+    _ = file(params.ms_files, glob: false, checkIfExists: true) //check it exists
+    def msetsList = new File(params.ms_files).collect {it}
     msets_ch = Channel.fromList(msetsList)
     clip_ch = clipData(msets_ch).collect()
 }
