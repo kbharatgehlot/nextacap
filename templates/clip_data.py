@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-import pyrap.tables as tab
+import casacore.tables as tab
 from argparse import ArgumentParser
 import sys
 import os

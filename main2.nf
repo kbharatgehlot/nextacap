@@ -763,7 +763,7 @@ def sagecalBandpassCommand() {
 
 def sagecalMPIDICommand(){
     if (params.mpi_di.sagecal_command) {
-        log.info("using user provided sagecal MPI DI command")
+        log.info("Info: using user provided sagecal MPI DI command")
         return params.mpi_di.sagecal_command
     }
     else{
@@ -787,6 +787,7 @@ def sagecalMPIDICommand(){
 -H ${params.mpi_di.robust_nu_upper} \
 -W ${params.mpi_di.pre_whiten} \
 -U ${params.mpi_di.apply_global_solution} \
+-k ${params.mpi_di.gains_correction_cluster_id} \
 -A ${params.mpi_di.admm_iterations} \
 -P ${params.mpi_di.consensus_polynomial_terms} \
 -G ${params.mpi_di.admm_rho_file} \
@@ -809,7 +810,7 @@ def sagecalMPIDICommand(){
 
 def sagecalMPIDDCommand(){
     if (params.mpi_dd.sagecal_command) {
-        log.info("using user provided sagecal MPI DD command")
+        log.info("Info: using user provided sagecal MPI DD command")
         return params.mpi_dd.sagecal_command
     }
     else {

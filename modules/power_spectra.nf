@@ -18,7 +18,6 @@ workflow {
 
 process initPSDB {
     // publishDir params.datapath
-
     input:
     val ready
     path datapath
