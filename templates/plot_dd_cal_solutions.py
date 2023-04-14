@@ -301,46 +301,46 @@ def main(args):
     if args.out_prefix:
         args.out_prefix = args.out_prefix + "_"
 
-        for pol_name, (i, j) in pols.items():
-            file_name = args.out_prefix + "sol_DD_abs_g_%s" % pol_name
-            do_plot(
-                freqs,
-                gain_data,
-                pol_name,
-                meta_data,
-                args.out_dir,
-                file_name,
-                1e-1,
-                1e1,
-                action_fct=np.abs,
-                log_norm=True,
-            )
-            file_name = args.out_prefix + "sol_DD_abs_gg_%s" % pol_name
-            do_plot(
-                freqs,
-                gain_data,
-                "gg_" + pol_name,
-                meta_data,
-                args.out_dir,
-                file_name,
-                1e-1,
-                1e1,
-                action_fct=np.abs,
-                log_norm=True,
-            )
-            file_name = args.out_prefix + "sol_DD_phase_g_%s" % pol_name
-            do_plot(
-                freqs,
-                gain_data,
-                pol_name,
-                meta_data,
-                args.out_dir,
-                file_name,
-                -np.pi,
-                np.pi,
-                action_fct=np.angle,
-                log_norm=False,
-            )
+    for pol_name, (i, j) in pols.items():
+        file_name = args.out_prefix + "sol_DD_abs_g_%s" % pol_name
+        do_plot(
+            freqs,
+            gain_data,
+            pol_name,
+            meta_data,
+            args.out_dir,
+            file_name,
+            1e-1,
+            1e1,
+            action_fct=np.abs,
+            log_norm=True,
+        )
+        file_name = args.out_prefix + "sol_DD_abs_gg_%s" % pol_name
+        do_plot(
+            freqs,
+            gain_data,
+            "gg_" + pol_name,
+            meta_data,
+            args.out_dir,
+            file_name,
+            1e-1,
+            1e1,
+            action_fct=np.abs,
+            log_norm=True,
+        )
+        file_name = args.out_prefix + "sol_DD_phase_g_%s" % pol_name
+        do_plot(
+            freqs,
+            gain_data,
+            pol_name,
+            meta_data,
+            args.out_dir,
+            file_name,
+            -np.pi,
+            np.pi,
+            action_fct=np.angle,
+            log_norm=False,
+        )
 
     for pol_name, (i, j) in pol_stokes.items():
         file_name = args.out_prefix + "sold_DD_abs_gg_%s" % pol_name
@@ -351,7 +351,7 @@ def main(args):
             meta_data,
             args.out_dir,
             file_name,
-            1e-1,
+            5e-1,
             0.5e1,
             action_fct=np.abs,
             log_norm=True,

@@ -64,7 +64,7 @@ workflow {
     //Generate mpirun and pssh hosts files
     SET_NODES(VET_PARAMS.out)
     
-    //flag and average to 002
+    // flag and average to 002
     // FLAG_GEN_002_VIS(SET_NODES.out[0], SET_NODES.out[1])
 
 
@@ -168,7 +168,7 @@ workflow SAGECAL_MPI_DI {
 
         cp_ch = getModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
 
-        di_preprocess_ch = preProcess_di(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002)
+        di_preprocess_ch = preProcess_di(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002, params.sim)
         sage_mpi_di_ch = sagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
 
         eff_ch = makeEffNr(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
@@ -219,7 +219,7 @@ workflow SAGECAL_MPI_DD {
      main:
         //  the di run already copied the models so no need to copy again
         // cp_ch = getModels(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.mpi_dd.sky_model, params.mpi_dd.clusters_file, params.mpi_dd.admm_rho_file, params.shapelets.modes, params.data.path)
-        dd_preprocess_ch = preProcess_dd(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003)
+        dd_preprocess_ch = preProcess_dd(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003, params.sim)
         sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
     emit:
         sagecalMPI.out
@@ -259,10 +259,10 @@ workflow POWER_SPECTRUM {
 
     main:
         allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
-        init_ch = initPSDB(sagecal_complete, params.data.path)
-        rev_ch = addRevision(init_ch.ps_dir, init_ch.default_toml_file, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision ) // TODO: stop using only the final node 
-        ps_ch = runPSPIPE(init_ch.ps_dir, rev_ch, params.data.obsid, params.data.all_ms_files_003)
-        plotPS(ps_ch.ready, init_ch.ps_dir, rev_ch, params.data.obsid)
+        // init_ch = initPSDB(sagecal_complete, params.data.path)
+        rev_ch = addRevision(sagecal_complete, params.data.path, params.pspipe.dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision ) // TODO: stop using only the final node 
+        ps_ch = runPSPIPE(rev_ch.ps_dir, rev_ch.toml_file, params.data.obsid, params.data.all_ms_files_003)
+        plotPS(ps_ch.ready, rev_ch.ps_dir, rev_ch.toml_file, params.data.obsid)
 }
 
 
@@ -375,11 +375,20 @@ process preProcess_di {
     val preprocessing_file
     val datapath
     val ms_files
+    val sim
 
     output:
     val true
 
     script:
+    if (sim)
+
+    """
+    echo "Info: We assume the simulation does not need any visibilties flagging before DI calibration."
+    """
+
+    else
+
     """
     pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_di.log 2>&1
     """
@@ -395,11 +404,20 @@ process preProcess_dd {
     val preprocessing_file
     val datapath
     val ms_files
+    val sim
 
     output:
     val true
 
     script:
+    if (sim)
+
+    """
+    echo "Info: We assume the simulation does not need any visibilties flagging before DD calibration."
+    """
+
+    else
+
     """
     pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_dd.log 2>&1
     """
@@ -503,6 +521,11 @@ def checkParams() {
     //check obsid and nodes
     assert params.data.path : log.error("Error:'--data.path' needed")
     assert params.cluster.nodes : log.error("Error: Please provide a comma separated string of nodes. Try --cluster.nodes '100,101,102,103,104'")
+
+    if (params.tasks.contains("ps")){
+        dir = file("${params.data.path}/${params.pspipe.dir}", type: 'dir', checkIfExists: false) //I don't know how to make it fail if it already exists.
+        dir.exists() ? log.error("Error: ${params.data.path}/${params.pspipe.dir} pspipe fails if the ps dir already exists. Delete/change it in params.json and rerun") : log.info("Info: pspipe dir ${params.data.path}/${params.pspipe.dir} ")
+    }
 }
 
 /*
@@ -605,7 +628,7 @@ def checkFilesExistence (files_path, files_glob_pattern) {
 
 /*
 Given the tasks requested using 'params.task' return a map of each task with its respective 'stage_number'
-This is forthe conventional MS naming
+This is for the conventional MS naming
 */
 def getRequiredtasksStageNumbers(){
     def tasks_number_map = ["gen002vis": 1, "gen003vis": 2, "mpi_di": 2, "bandpass": 2, "mpi_dd": 3  ]
@@ -635,6 +658,7 @@ def getInitialStageNumber() {
 /*
 Some proesses may need a list of all measurement sets across all nodes. e.g pspipe
 Make such a file given a map containing the subbands per node and the stage number of the data needed
+This list is written once in the master node
 */
 def allMsetsPerStageNumber(stage_number, sub_bands_per_node){
     mses = []
@@ -650,7 +674,20 @@ def allMsetsPerStageNumber(stage_number, sub_bands_per_node){
     writeListToTxt(txt, mses)
 }
 
+/*
+ This is similar to the `allMsetsPerStageNumber` but it makes a list in each node containing the ms files in that node.
+ It is necessary fo rtasks that are to be run in parallel individually in each node e.g preprocessing each msfile, bandpass calibration, data averagineg etc...
+*/
+def writeMSListPerNodeStageNumber() {
+    requested_tasks = getRequiredtasksStageNumbers()
+    stage_num_per_task = requested_tasks.values() as List
 
+    for (n in stage_num_per_task.unique()) {
+        _writeMSListPerNodeStageNumber(n, params.data.sub_bands_per_node)
+    }
+}
+
+//dummy method for the above one
 def _writeMSListPerNodeStageNumber(stage_number, sub_bands_per_node){
     stage_number = String.format("%03d", stage_number)
     for ( node in sub_bands_per_node ) {
@@ -662,16 +699,6 @@ def _writeMSListPerNodeStageNumber(stage_number, sub_bands_per_node){
             mses.add(ms)
         }
         writeListToTxt(txt, mses)
-    }
-}
-
-
-def writeMSListPerNodeStageNumber() {
-    requested_tasks = getRequiredtasksStageNumbers()
-    stage_num_per_task = requested_tasks.values() as List
-
-    for (n in stage_num_per_task.unique()) {
-        _writeMSListPerNodeStageNumber(n, params.data.sub_bands_per_node)
     }
 }
 
@@ -691,7 +718,9 @@ def checkInitialDataDistribution(nodes_list) {
 
     params.data.sub_bands_per_node = [:]
 
-    def isSubBand = { it.toString().split("_")[-4].split("SB")[1].toInteger()}
+    def isSubBand = { it.toString().split("SB")[1].split("_uv_${initial_stage_number}_${params.data.label}.MS")[0].toInteger()}
+
+    // def isSubBand = { it.toString().split("_")[-4].split("SB")[1].toInteger()}
 
     for (node in nodes_list) {
         fullpath="/net/${node}${params.data.path}"
@@ -723,11 +752,11 @@ def lofarDefaultMsnamePattern(stage_number) {
 
 
 def sagecalBandpassCommand() {
-    if (params.bandpass.sagecal_command) {
-        log.info("Info: using user provided sagecal bandpass command")
-        return params.bandpass.sagecal_command
-    }
-    else {
+    // if (params.bandpass.sagecal_command) {
+    //     log.info("Info: using user provided sagecal bandpass command")
+    //     return params.bandpass.sagecal_command
+    // }
+    // else {
         String sage_bandpass_command =  """
 -s ${params.bandpass.sky_model} \
 -F ${params.bandpass.sky_model_format} \
@@ -758,15 +787,15 @@ def sagecalBandpassCommand() {
         bandpass_command= bandpass_command.stripIndent()
 
         return bandpass_command
-    }
+    // }
 }
 
 def sagecalMPIDICommand(){
-    if (params.mpi_di.sagecal_command) {
-        log.info("Info: using user provided sagecal MPI DI command")
-        return params.mpi_di.sagecal_command
-    }
-    else{
+    // if (params.mpi_di.sagecal_command) {
+    //     log.info("Info: using user provided sagecal MPI DI command")
+    //     return params.mpi_di.sagecal_command
+    // }
+    // else{
             String sage_mpi_di_command =  """ \
 -s ${params.mpi_di.sky_model} \
 -F ${params.mpi_di.sky_model_format} \
@@ -797,6 +826,9 @@ def sagecalMPIDICommand(){
 -V > ${params.mpi_di.logfile}  2>&1 
 """.stripIndent()
 
+        if (params.mpi_di.constant_rho_value){
+        sage_mpi_di_command = sage_mpi_di_command.replace("-G ${params.mpi_di.admm_rho_file}", "-r ${params.mpi_di.constant_rho_value}")
+    }
 
         mpi_command = make_mpi_command()
 
@@ -804,16 +836,16 @@ def sagecalMPIDICommand(){
         mpi_di_command= mpi_di_command.stripIndent()
 
         return mpi_di_command
-    }
+    // }
 }
 
 
 def sagecalMPIDDCommand(){
-    if (params.mpi_dd.sagecal_command) {
-        log.info("Info: using user provided sagecal MPI DD command")
-        return params.mpi_dd.sagecal_command
-    }
-    else {
+    // if (params.mpi_dd.sagecal_command) {
+    //     log.info("Info: using user provided sagecal MPI DD command")
+    //     return params.mpi_dd.sagecal_command
+    // }
+    // else {
             String sage_mpi_dd_command =  """ \
 -s ${params.mpi_dd.sky_model} \
 -F ${params.mpi_dd.sky_model_format} \
@@ -843,13 +875,17 @@ def sagecalMPIDDCommand(){
 -V > ${params.mpi_dd.logfile}  2>&1 
 """.stripIndent()
 
+    if (params.mpi_dd.constant_rho_value){
+        sage_mpi_dd_command = sage_mpi_dd_command.replace("-G ${params.mpi_dd.admm_rho_file}", "-r ${params.mpi_dd.constant_rho_value}")
+    }
+
         mpi_command = make_mpi_command()
 
         mpi_dd_command = mpi_command.strip() + " " +  sage_mpi_dd_command.strip()
         mpi_dd_command = mpi_dd_command.stripIndent()
 
         return mpi_dd_command
-    }
+    // }
 }
 
 //write the mpi run command

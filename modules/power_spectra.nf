@@ -10,7 +10,7 @@ params.max_concurrent=15
 
 workflow {
     init_ch = initPSDB(true, params.datapath)
-    rev_ch = addRevision(init_ch.ps_dir, init_ch.default_toml_file, params.nodes, params.max_concurrent, params.revision )
+    rev_ch = addRevision(init_ch.ps_dir, params.nodes, params.max_concurrent, params.revision )
     ps_ch = runPSPIPE(init_ch.ps_dir, rev_ch, params.obsid, params.msfiles)
     plotPS(ps_ch.ready, init_ch.ps_dir, rev_ch, params.obsid)
 }
@@ -23,55 +23,69 @@ process initPSDB {
     path datapath
 
     output:
-    path "${datapath}/ps" , emit: ps_dir
-    path "${datapath}/ps/default.toml", emit: default_toml_file
+    path "${datapath}/ps2" , emit: ps_dir
+    // path "${datapath}/ps/default.toml", emit: default_toml_file
     // path "${datapath}/ps/config"
 
     script:
 
     """
-    mkdir "${datapath}/ps"
-    cd "${datapath}/ps"
-    psdb init hba "${datapath}/ps" default
+    mkdir "${datapath}/ps2"
+    cd "${datapath}/ps2"
+    # psdb init hba "${datapath}/ps" default
     """
 }
 
 
 process addRevision{
-    publishDir "${params.datapath}/ps"
+    publishDir "${params.datapath}"
 
     input:
-    path ps_dir
-    path default_toml_file
+    val ready
+    path datapath
+    val ps_dir
     val nodes
     val max_concurrent
     val revname
 
     output:
-    path "${revname}.toml"
+    path "${datapath}/${ps_dir}" , emit: ps_dir
+    path "${datapath}/${ps_dir}/${revname}.toml", emit: toml_file
 
     shell:
+    //    #default_settings = "!{ps_dir}/!{default_toml_file}"
     '''
     #!/bin/bash
-    psdb new_rev !{default_toml_file} !{revname}
+    mkdir "!{datapath}/!{ps_dir}"
+    cd "!{datapath}/!{ps_dir}"
+    psdb new_rev !{projectDir}/configs/pspipe_toml_templates/default.toml !{revname}
     cat >"!{revname}.toml" <<EOL
-    default_settings = "!{ps_dir}/!{default_toml_file}"
+    default_settings = "!{projectDir}/configs/pspipe_toml_templates/default.toml"
+    data_dir = "!{datapath}/!{ps_dir}"
     [worker]
     nodes = \"!{nodes}\"
     max_concurrent = !{max_concurrent}
     run_on_file_host = true
     run_on_file_host_pattern = '\\/net/(node\\d{3})'
+    env_file='/home/users/mertens/.activate_pspipe_dev.sh'
+    [merge_ms]
+    aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
     [image]
     data_col = "DATA"
+    channels_out = 'every3'
+    name="!{revname}"
     [power_spectra]
-    eor_bin_list = "!{ps_dir}/config/eor_bins_hba.parset"
-    ps_config = "!{ps_dir}/config/ps_config_hba.parset"
-    flagger = "!{ps_dir}/config/flagger.parset"
+    eor_bin_list = "!{projectDir}/configs/pspipe_toml_templates/eor_bins_hba.parset"
+    ps_config = "!{projectDir}/configs/pspipe_toml_templates/ps_config_hba.parset"
+    flagger = "!{projectDir}/configs/pspipe_toml_templates/flagger.parset"
     [gpr]
-    name = ""
-    plot_results = true
-    config_i = "!{ps_dir}/config/gpr_config_hba.parset"
-    config_v = "!{ps_dir}/config/gpr_config_v.parset"
+    config_i = "!{projectDir}/configs/pspipe_toml_templates/gpr_config_hba.parset"
+    config_v = "!{projectDir}/configs/pspipe_toml_templates/gpr_config_v.parset"
+    [ml_gpr]
+    name = 'eor_vae_2023'
+    config = "!{projectDir}/configs/pspipe_toml_templates/gpr_ml_config_2023.parset"
+    [combine]
+    pre_flag = "!{projectDir}/configs/pspipe_toml_templates/flagger_pre_combine.parset"
     EOL
     '''
     //same as writing this inside a bash script and calling it thisway
@@ -84,7 +98,6 @@ process runPSPIPE {
 
     input:
     path ps_dir
-
     path toml_file
     val obsid
     path msfiles
@@ -99,15 +112,16 @@ process runPSPIPE {
     // ,ssins seems to give an error when included. TODO:
     '''
     psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
-    pspipe merge_ms !{toml_file} !{obsid}
+    pspipe merge_ms,delay_flagger !{toml_file} !{obsid}
     pspipe image,gen_vis_cube !{toml_file} !{obsid}_flagged
-    pspipe run_gpr !{toml_file} !{obsid}_flagged
+    pspipe run_ml_gpr !{toml_file} !{obsid}_flagged
     '''
 }
 
 
 process plotPS {
-    publishDir "${params.datapath}/ps"
+    publishDir "${params.datapath}/${ps_dir}"
+    // conda '/home/users/chege/anaconda3/envs/leapenv'
 
     input:
     val ready
@@ -118,9 +132,9 @@ process plotPS {
     output:
     path "${obsid}_flagged_IV_power_spectrum.png"
 
-    script:
+    shell:
     """
-    python3 /home/users/chege/theleap/leap/templates/plot_power_spctrum.py ${toml_file} --obsid ${obsid}_flagged
+    python3 /home/users/chege/theleap/leap/templates/plot_power_spctrum.py !{toml_file} --obsid !{obsid}_flagged
     """
 }
 
