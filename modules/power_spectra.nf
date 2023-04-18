@@ -6,13 +6,15 @@ params.obsid="L254871" //null
 params.msfiles = "/data/users/lofareor/chege/psp/ms_files.txt" //null
 params.nodes = "node129" //"node[125-129]"
 params.max_concurrent=15
+params.data_column="DATA"
+params.pspipe_dir=null
 
 
 workflow {
-    init_ch = initPSDB(true, params.datapath)
-    rev_ch = addRevision(init_ch.ps_dir, params.nodes, params.max_concurrent, params.revision )
-    ps_ch = runPSPIPE(init_ch.ps_dir, rev_ch, params.obsid, params.msfiles)
-    plotPS(ps_ch.ready, init_ch.ps_dir, rev_ch, params.obsid)
+    // init_ch = initPSDB(true, params.datapath)
+    rev_ch = addRevision(true, params.obsid, params.data_column, params.datapath, params.pspipe_dir, params.nodes, params.max_concurrent, params.revision) //!check this
+    ps_ch = runPSPIPE(params.pspipe_dir, rev_ch.toml_file, params.obsid, params.msfiles)
+    // plotPS(ps_ch.ready, params.pspipe_dir, rev_ch.toml_file, params.obsid)
 }
 
 
@@ -38,90 +40,137 @@ process initPSDB {
 
 
 process addRevision{
-    publishDir "${params.datapath}"
+    publishDir "${ps_dir}"
 
     input:
     val ready
+    val obsid
+    val data_column
     path datapath
     val ps_dir
     val nodes
     val max_concurrent
     val revname
+    val merge_ms
 
     output:
-    path "${datapath}/${ps_dir}" , emit: ps_dir
-    path "${datapath}/${ps_dir}/${revname}.toml", emit: toml_file
+    val "${ps_dir}/${revname}.toml", emit: toml_file
 
     shell:
-    //    #default_settings = "!{ps_dir}/!{default_toml_file}"
+    // template 'add_rev.sh'
     '''
     #!/bin/bash
-    mkdir "!{datapath}/!{ps_dir}"
-    cd "!{datapath}/!{ps_dir}"
-    psdb new_rev !{projectDir}/configs/pspipe_toml_templates/default.toml !{revname}
-    cat >"!{revname}.toml" <<EOL
-    default_settings = "!{projectDir}/configs/pspipe_toml_templates/default.toml"
-    data_dir = "!{datapath}/!{ps_dir}"
-    [worker]
-    nodes = \"!{nodes}\"
-    max_concurrent = !{max_concurrent}
-    run_on_file_host = true
-    run_on_file_host_pattern = '\\/net/(node\\d{3})'
-    env_file='/home/users/mertens/.activate_pspipe_dev.sh'
-    [merge_ms]
-    aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
-    [image]
-    data_col = "DATA"
-    channels_out = 'every3'
-    name="!{revname}"
-    [power_spectra]
-    eor_bin_list = "!{projectDir}/configs/pspipe_toml_templates/eor_bins_hba.parset"
-    ps_config = "!{projectDir}/configs/pspipe_toml_templates/ps_config_hba.parset"
-    flagger = "!{projectDir}/configs/pspipe_toml_templates/flagger.parset"
-    [gpr]
-    config_i = "!{projectDir}/configs/pspipe_toml_templates/gpr_config_hba.parset"
-    config_v = "!{projectDir}/configs/pspipe_toml_templates/gpr_config_v.parset"
-    [ml_gpr]
-    name = 'eor_vae_2023'
-    config = "!{projectDir}/configs/pspipe_toml_templates/gpr_ml_config_2023.parset"
-    [combine]
-    pre_flag = "!{projectDir}/configs/pspipe_toml_templates/flagger_pre_combine.parset"
-    EOL
+
+mkdir -p "!{ps_dir}"
+cd "!{ps_dir}"
+cp "!{projectDir}/configs/pspipe_toml_templates/default.toml" .
+cp "!{projectDir}/configs/pspipe_toml_templates/eor_bins_hba.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/ps_config_hba.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/flagger.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/gpr_config_hba.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/gpr_config_v.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/gpr_ml_config_2023.parset" .
+cp "!{projectDir}/configs/pspipe_toml_templates/flagger_pre_combine.parset" .
+
+if !{merge_ms}; then
+    image_data_col="DATA"
+else
+    image_data_col="!{data_column}"
+fi
+
+psdb new_rev !{ps_dir}/default.toml !{revname}
+cat >"!{revname}.toml" <<EOL
+default_settings = "!{ps_dir}/default.toml"
+data_dir = "!{ps_dir}"
+[worker]
+nodes = \"!{nodes}\"
+max_concurrent = !{max_concurrent}
+run_on_file_host = true
+run_on_file_host_pattern = '\\/net/(node\\d{3})'
+env_file='/home/users/mertens/.activate_pspipe_dev.sh'
+[merge_ms]
+data_col = "!{data_column}"
+#aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
+[image]
+data_col = "${image_data_col}"
+channels_out = 'every3'
+name="!{revname}"
+[power_spectra]
+eor_bin_list = "!{ps_dir}/eor_bins_hba.parset"
+ps_config = "!{ps_dir}/ps_config_hba.parset"
+flagger = "!{ps_dir}/flagger.parset"
+[gpr]
+config_i = "!{ps_dir}/gpr_config_hba.parset"
+config_v = "!{ps_dir}/gpr_config_v.parset"
+[ml_gpr]
+name = 'eor_vae_2023'
+config = "!{ps_dir}/gpr_ml_config_2023.parset"
+[combine]
+pre_flag = "!{ps_dir}/flagger_pre_combine.parset"
+EOL
     '''
-    //same as writing this inside a bash script and calling it thisway
-    // template '/home/users/chege/theleap/leap/templates/add_rev.sh'
 }
 
 
 process runPSPIPE {
-    // publishDir "${params.datapath}/ps"
+    // debug true
 
     input:
     path ps_dir
     path toml_file
     val obsid
     path msfiles
+    val merge_ms
+    val delay_flag
+    val ml_gpr
 
     output:
     val true, emit: ready
-    // path "default"
-    // path "merged_ms"
-    // path "obs_ids"
 
     shell:
+    // template 'run_pspipe.sh'
     // ,ssins seems to give an error when included. TODO:
+    // '''
+    // psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
+    // pspipe merge_ms,delay_flagger !{toml_file} !{obsid}
+    // pspipe image,gen_vis_cube !{toml_file} !{obsid}_flagged
+    // pspipe run_ml_gpr !{toml_file} !{obsid}_flagged
+    // '''
     '''
     psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
-    pspipe merge_ms,delay_flagger !{toml_file} !{obsid}
-    pspipe image,gen_vis_cube !{toml_file} !{obsid}_flagged
-    pspipe run_ml_gpr !{toml_file} !{obsid}_flagged
+    obs="!{obsid}"
+
+    if !{merge_ms}; then
+        echo "Merging Ms files"
+        if !{delay_flag}; then
+            echo "Using delay flagger"
+            pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging.log 2>&1
+        else
+            pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging.log 2>&1
+        fi
+
+        obs="!{obsid}_flagged"
+    fi
+    echo "making image cube"
+    pspipe image,gen_vis_cube !{toml_file} ${obs} > !{launchDir}/logs/ps_image_gen_vis_cube.log 2>&1
+
+    if !{ml_gpr}; then
+        echo "running ML_GPR"
+        pspipe run_ml_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_ml_gpr.log 2>&1
+    else
+        echo "running GPR"
+        pspipe run_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_gpr.log 2>&1
+    fi
+
+    python3 !{projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid ${obs} --outdir ${ps_dir} > !{launchDir}/logs/plot_ps.log 2>&1
+
     '''
+
 }
 
 
 process plotPS {
-    publishDir "${params.datapath}/${ps_dir}"
-    // conda '/home/users/chege/anaconda3/envs/leapenv'
+    publishDir "${ps_dir}", pattern: "*.png", mode: "move", overwrite: true
 
     input:
     val ready
@@ -130,11 +179,11 @@ process plotPS {
     val obsid
 
     output:
-    path "${obsid}_flagged_IV_power_spectrum.png"
+    path "${obsid}_*.png"
 
     shell:
     """
-    python3 /home/users/chege/theleap/leap/templates/plot_power_spctrum.py !{toml_file} --obsid !{obsid}_flagged
+    python3 ${projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid !{obsid}
     """
 }
 

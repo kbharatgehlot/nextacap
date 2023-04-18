@@ -1,5 +1,6 @@
 #!/usr/bin/env nextflow
 
+
 process makeEffNr {
     publishDir params.data.path
     errorStrategy 'ignore'
@@ -88,6 +89,9 @@ process plotDDSageSols {
     val solsdir
     val fmin
     val fmax
+    val clusters
+    val clusternames
+    val stations
 
     output:
         // path "${obsid}_zsol"
@@ -96,7 +100,7 @@ process plotDDSageSols {
     script:
     logs = "${params.logs_dir}/plot_dd_sols_${obsid}.log"
     """
-    python3 ${projectDir}/templates/plot_dd_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} ${solsdir}/${sols_npy} --eff_nr ${eff_nr_file} > ${logs} 2>&1
+    python3 ${projectDir}/templates/plot_dd_cal_solutions.py --fmin ${fmin} --fmax ${fmax} --out_dir ${solsdir} ${solsdir}/${sols_npy} --eff_nr ${eff_nr_file} --clusterlist ${clusters} --clusternames ${clusternames} --stations ${stations}> ${logs} 2>&1
     """
 }
 

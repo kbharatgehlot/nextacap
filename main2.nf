@@ -167,8 +167,8 @@ workflow SAGECAL_MPI_DI {
      main:
 
         cp_ch = getModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
-
-        di_preprocess_ch = preProcess_di(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002, params.sim)
+        add_cols_ch = addMsColumn(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_002, params.mpi_di.output_column)
+        di_preprocess_ch = preProcess_di(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002, params.sim)
         sage_mpi_di_ch = sagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
 
         eff_ch = makeEffNr(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
@@ -187,7 +187,9 @@ workflow SAGECAL_BANDPASS {
         sage_mpi_di_done
 
     main:
-        bandpass_ch = sagecalStandalone(sage_mpi_di_done, params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, params.data.ms_files_002)
+        add_cols_ch = addMsColumn(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_002, params.bandpass.output_column)
+
+        bandpass_ch = sagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, params.data.ms_files_002, params.bandpass.solsdir)
 
         eff_ch = makeEffNr(bandpass_ch.sagecal_complete, params.bandpass.clusters_file)
 
@@ -219,7 +221,8 @@ workflow SAGECAL_MPI_DD {
      main:
         //  the di run already copied the models so no need to copy again
         // cp_ch = getModels(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.mpi_dd.sky_model, params.mpi_dd.clusters_file, params.mpi_dd.admm_rho_file, params.shapelets.modes, params.data.path)
-        dd_preprocess_ch = preProcess_dd(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003, params.sim)
+        add_cols_ch = addMsColumn(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_003, params.mpi_dd.output_column)
+        dd_preprocess_ch = preProcessDD(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003, params.sim)
         sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
     emit:
         sagecalMPI.out
@@ -244,7 +247,7 @@ workflow ANALYSE_GAINS {
         }
         else if (gains_type=="mpi_dd") {
                 convertSageZSol(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.data.path)
-                plotDDSageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax)
+                plotDDSageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
             }
 
         else if (gains_type=="bandpass") {
@@ -260,9 +263,9 @@ workflow POWER_SPECTRUM {
     main:
         allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
         // init_ch = initPSDB(sagecal_complete, params.data.path)
-        rev_ch = addRevision(sagecal_complete, params.data.path, params.pspipe.dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision ) // TODO: stop using only the final node 
-        ps_ch = runPSPIPE(rev_ch.ps_dir, rev_ch.toml_file, params.data.obsid, params.data.all_ms_files_003)
-        plotPS(ps_ch.ready, rev_ch.ps_dir, rev_ch.toml_file, params.data.obsid)
+        rev_ch = addRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, params.pspipe.dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms) // TODO: stop using only the final node 
+        ps_ch = runPSPIPE(params.pspipe.dir, rev_ch.toml_file, params.data.obsid, params.data.all_ms_files_003, params.pspipe.merge_ms, params.pspipe.delay_flag, params.pspipe.ml_gpr)
+        // plotPS(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
 }
 
 
@@ -336,7 +339,7 @@ process psshNodesList {
     write_nodes_for_pssh(nodes, pssh_hosts_txt_file)
 }
 
-//cp_ch = getModels(params.cluster.pssh_hosts_txt_file, params.sky_model, params.clusters_file, params.admm_rho_file, params.shapelets_modes, params.data.path)
+
 // copying the models fail when i provide them as path
 process getModels {
     debug true
@@ -394,8 +397,29 @@ process preProcess_di {
     """
 }
 
+process addMsColumn {
+    debug true
 
-process preProcess_dd {
+    input:
+    val ready
+    val pssh_hosts_txt_file
+    val datapath
+    val ms_files
+    val col
+  
+
+    output:
+    val true
+
+    script:
+
+    """
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${projectDir}/modules/add_ms_col.nf --ms_files ${ms_files} --col ${col} > ${params.logs_dir}/add_${col}_column.log 2>&1
+    """
+}
+
+
+process preProcessDD {
     debug true
 
     input:
@@ -476,13 +500,14 @@ process sagecalStandalone {
     val datapath
     val standalone_sage_nf_file
     val ms_files
+    val solsdir
 
     output:
     val true , emit: sagecal_complete
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
 
@@ -490,6 +515,7 @@ process sagecalStandalone {
 process sagecalMPI {
     debug true
     cpus params.mpi_di.number_of_threads
+    time '1hour 30minutes'
 
     input:
     val ready
@@ -616,7 +642,7 @@ Check that the directory exists and has at least one file corresonding to the gl
 def checkFilesExistence (files_path, files_glob_pattern) {
     //First check that the directory exists
     dir = file(files_path, type: 'dir', glob: true, checkIfExists: true)
-    assert dir.isDirectory() : log.error("Error: datapath param is not a valid path on ${node}. Got '--datapath=${datapath}'")
+    assert dir.isDirectory() : log.error("Error: datapath param is not a valid path on ${node}. Got '--datapath=${params.data.path}'")
 
     //check that we have a least one file with the given glob pattern
     ms_files_path = "${files_path}/${files_glob_pattern}"

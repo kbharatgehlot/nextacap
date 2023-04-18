@@ -32,36 +32,34 @@ parser.add_argument("--fmax", help="Maximum frequency in MHz", type=float, defau
 parser.add_argument("--out_dir", help="Output directory", default=".")
 parser.add_argument("--out_prefix", help="Prefix to the output filename", default="")
 parser.add_argument(
-    "--sim",
-    help="The solutions are from a simulation so the clusters may not be the default NCP clusters",
-    action="store_true",
+    "--clusterlist",
+    nargs="+",
+    help="clusters indices to plot gains of",
+)
+parser.add_argument(
+    "--clusternames",
+    nargs="+",
+    help="clusters names to plot",
+    required=False
+)
+parser.add_argument(
+    "--stations",
+    nargs="+",
+    help="station indices to plot gains of",
+    required=False
 )
 
 args = parser.parse_args(sys.argv[1:])
 
-stations = [0, 20, 40, 50]
+stations = [int(i) for i in args.stations[0].split(",")]
 
-if args.sim:
-    clusters = list(range(1, 31))[::2]
-    clusters_names = [str(c) for c in clusters]
-else:
-    clusters = [1, 4, 24, 5, 13, 106, 10, 51, 96, 40, 84, 91, 30, 105]
-    clusters_names = [
-        "~ NCP",
-        "3C61.1",
-        "3 deg",
-        "4 deg",
-        "5 deg",
-        "6 deg",
-        "7 deg",
-        "8 deg",
-        "9 deg",
-        "10 deg",
-        "11 deg",
-        "14 deg",
-        "Cas A",
-        "Cyg A",
-    ]
+clusters = [int(clst) for clst in args.clusterlist[0].split(",")]
+
+try:
+    clusters_names = [str(clstn) for clstn in args.clusternames[0].split(",")]
+    assert len(clusters)==len(cluster_names), "mismatch between number of cluster indices and cluster names"
+except:
+    cluster_names = [str(s) for s in clusters]
 
 pols = dict(zip(["XX", "YY", "XY", "YX"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
 pol_stokes = dict(zip(["I", "V", "U", "Q"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
@@ -172,10 +170,10 @@ def get_gains(d, cluster, station, eff_nr):
 
 
 def cov2stokes(R):
-    I = R[:, :, 0, 0] + R[:, :, 1, 1]
-    V = -1j * (R[:, :, 0, 1] - R[:, :, 1, 0])
-    Q = R[:, :, 0, 0] - R[:, :, 1, 1]
-    U = R[:, :, 0, 1] + R[:, :, 1, 0]
+    I = 0.5 * R[:, :, 0, 0] + R[:, :, 1, 1]
+    V = 0.5 * -1j * (R[:, :, 0, 1] - R[:, :, 1, 0])
+    Q = 0.5 * R[:, :, 0, 0] - R[:, :, 1, 1]
+    U = 0.5 * R[:, :, 0, 1] + R[:, :, 1, 0]
 
     return I, Q, U, V
 
@@ -259,6 +257,15 @@ def do_plot(
             if j == len(stations) - 1 and i == 0:
                 cbs = ColorbarSetting(ColorbarInnerPosition(height="70%", pad=0.7))
                 cbs.add_colorbar(g_map, axs[i, j])
+
+            axs[i, j].text(
+                0.05,
+                0.95,
+                "Median: %.4g" % np.median(g),
+                transform=axs[i, j].transAxes,
+                va="top",
+                ha="left",
+            )
 
     # fig.tight_layout(pad=0.4)
     fig.savefig(os.path.join(out_dir, "%s.pdf" % file_name), bbox_inches="tight")

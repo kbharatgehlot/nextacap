@@ -3,6 +3,7 @@
 params.datapath="${launchDir}"
 params.outdir = "${launchDir}"
 params.ms_files= null
+params.solsdir="${launchDir}"
 
 // params.number_of_threads = 4
 
@@ -14,7 +15,7 @@ workflow {
     def msetsList = new File(params.ms_files).collect {it}
     msets_ch = Channel.fromList(msetsList) // .buffer( size: 4, remainder: true )
 
-    sage_std_ch = runSagecalStandalone(msets_ch, params.shapelets.modes).collect()
+    sage_std_ch = runSagecalStandalone(msets_ch, params.shapelets.modes, params.solsdir).collect()
 }
 
 process runSagecalStandalone {
@@ -22,12 +23,13 @@ process runSagecalStandalone {
     // cpus params.number_of_threads
     errorStrategy { task.exitStatus == 139 ? 'retry' : 'terminate' } //134 is core dumping error
     publishDir "${params.outdir}/bandpass_logs", pattern: "*bandpass.log", mode: "move", overwrite: true
-    publishDir "${params.outdir}/solutions_sagecal_bandpass", pattern: "*.solutions", mode: "move", overwrite: true
+    publishDir "${solsdir}", pattern: "*.solutions", mode: "move", overwrite: true
     label 'parallel_jobs'
 
     input:
     path ms
     val modes
+    val solsdir
 
     output:
 
