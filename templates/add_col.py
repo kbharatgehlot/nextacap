@@ -43,11 +43,13 @@ def main(argv):
         desc = myt.getcoldesc("DATA")
         for col in colnames:
             if col in myt.colnames():
-                myt.removecols(col)
-            desc["name"] = col
-            myt.addcols(desc)
-            myt.putcol(col, np.zeros_like(data))
-            print(f"{col} column added to {ms}")
+                # myt.removecols(col)
+                print(f"MS already has {col} column. Not removing/readdding")
+            else:
+                desc["name"] = col
+                myt.addcols(desc)
+                myt.putcol(col, np.zeros_like(data))
+                print(f"{col} column added to {ms}")
 
         myt.close()
 

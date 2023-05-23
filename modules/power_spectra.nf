@@ -8,17 +8,20 @@ params.nodes = "node129" //"node[125-129]"
 params.max_concurrent=15
 params.data_column="DATA"
 params.pspipe_dir=null
+params.merge_ms = false
+params.delay_flag = false
+params.ml_gpr = false
 
 
 workflow {
-    // init_ch = initPSDB(true, params.datapath)
-    rev_ch = addRevision(true, params.obsid, params.data_column, params.datapath, params.pspipe_dir, params.nodes, params.max_concurrent, params.revision) //!check this
-    ps_ch = runPSPIPE(params.pspipe_dir, rev_ch.toml_file, params.obsid, params.msfiles)
-    // plotPS(ps_ch.ready, params.pspipe_dir, rev_ch.toml_file, params.obsid)
+    // init_ch = InitPSDB(true, params.datapath)
+    rev_ch = AddRevision(true, params.obsid, params.data_column, params.datapath, params.pspipe_dir, params.nodes, params.max_concurrent, params.revision, params.merge_ms) //!check this
+    ps_ch = RunPSPIPE(params.pspipe_dir, rev_ch.toml_file, params.obsid, params.msfiles, params.merge_ms, params.delay_flag, params.ml_gpr)
+    // PlotPowerSpectrum(ps_ch.ready, params.pspipe_dir, rev_ch.toml_file, params.obsid)
 }
 
 
-process initPSDB {
+process InitPSDB {
     // publishDir params.datapath
     input:
     val ready
@@ -39,7 +42,7 @@ process initPSDB {
 }
 
 
-process addRevision{
+process AddRevision{
     publishDir "${ps_dir}"
 
     input:
@@ -90,7 +93,7 @@ run_on_file_host_pattern = '\\/net/(node\\d{3})'
 env_file='/home/users/mertens/.activate_pspipe_dev.sh'
 [merge_ms]
 data_col = "!{data_column}"
-#aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
+aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
 [image]
 data_col = "${image_data_col}"
 channels_out = 'every3'
@@ -112,7 +115,7 @@ EOL
 }
 
 
-process runPSPIPE {
+process RunPSPIPE {
     // debug true
 
     input:
@@ -140,6 +143,8 @@ process runPSPIPE {
     psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
     obs="!{obsid}"
 
+    mkdir -p !{launchDir}/logs
+
     if !{merge_ms}; then
         echo "Merging Ms files"
         if !{delay_flag}; then
@@ -162,14 +167,14 @@ process runPSPIPE {
         pspipe run_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_gpr.log 2>&1
     fi
 
-    python3 !{projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid ${obs} --outdir ${ps_dir} > !{launchDir}/logs/plot_ps.log 2>&1
+    # python3 !{projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid ${obs} --outdir !{ps_dir} > !{launchDir}/logs/plot_ps.log 2>&1
 
     '''
 
 }
 
 
-process plotPS {
+process PlotPowerSpectrum {
     publishDir "${ps_dir}", pattern: "*.png", mode: "move", overwrite: true
 
     input:
@@ -189,7 +194,7 @@ process plotPS {
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// I initilally wrote these tasks as separate processes but since they all take similar inputs I combined them into the runPSPIPE process
+// I initilally wrote these tasks as separate processes but since they all take similar inputs I combined them into the RunPSPIPE process
 // I might have to add some if conditions incase say, the user wants to skip gpr
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -2,20 +2,23 @@
 import groovy.json.JsonOutput
 
 include {
-    makeEffNr;
-    convertSageSolutions;
-    convertSageZSol;
-    plotDDSageSols;
-    plotDISageSols;
-} from './modules/gains_analysis'
+    MakeEffectiveClustersNumberFile;
+    ConvertSagecalSolutions;
+    ConvertSagecalGlobalSolutions;
+    PlotSagecalDISolutions;
+    PlotSagecalDDSolutions;
+} from './modules/gains_analysis.nf'
 
 include {
-    initPSDB;
-    addRevision;
-    runPSPIPE;
-    plotPS;
+    InitPSDB;
+    AddRevision;
+    RunPSPIPE;
+    PlotPowerSpectrum;
 } from './modules/power_spectra.nf'
 
+
+//The tasks to be run are declared using the '-profile' command line option as a comma-separated string
+//we split this string here into a list
 params.tasks = "${workflow.profile}".split(",")
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -24,30 +27,61 @@ params.tasks = "${workflow.profile}".split(",")
 
 def helpMessage() {
 log.info """
-Typical usage command:
-    nextflow run ../leap/main.nf --mode mpi --stage DD --obsid L254871 --nodes "125,126,127,128,129"
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 
-Mandatory arguments:
---obsid                        Observation ID. e.g L254874
---datapath                     The path where data is stored. Should be valid for all the nodeswhere data is distributed.
---nodes                        Node numbers where data is distributed as a comma separated string. e.g. "125,126,127,128,129" or a single number if using a single node. The last node in the list is used as the masternode.
---slots                        Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on dawn.
+DISCLAIMER! 
+    The workflow configuration in the current version runs the end to end LOFAR production pipeline. It includes ALL analysis tasks (plus some diagnostics steps) in the following sequence:
+        1: mpi_di
+        2: bandpass
+        3: gen003vis
+        4: mpi_dd
+        5: gains
+        6: ps
 
---mode                         Either of the 2 sagecal modes "mpi" or "standalone".
---stage                        "DI" or "DD".
---stage_number                 "002" or "003", data labeling depending the analysis stage
---label                        An extra data string label, like "_R" or '_2022' previously used for LOFAR NCP data to refer to a specific processing season.
---redshift                     One of the 3 LOFAR redshift bins; 1, 2 or 3.
+    While there are plans to enable a different number/order of tasks as required by the user, this functionality is yet automated.
+    However, A user familiar with Nextflow syntax can easily modify the main workflow to their specific requirements.
+    For sugestions/questions talk to the author of NextLEAP
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 
-Optional arguments:
---number_of_processes          Total processes needed for sagecal mpi mode.
---params.ms_pattern            A pattern matching the naming of the measurement sets to be processed.
---timechunks                   Stop after outputting this number of solutions. Otherwise calibrate full observation. Only available in mpi mode.
---help                         This usage statement, and exit.
+
+TYPICAL USAGE COMMAND:
+    This pipeline runs in 2 commands:
+
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+    |nextflow run main2.nf -profile standard,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps --data.obsid L254871 --data.path /path/to/MS/files/ --data.label R --cluster.nodes 125,126,127,128,129,130,131 -entry init   |
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+    |nextflow run main2.nf -profile standard,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps -params-file params.json                                                                                                     |
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+    Command 1:  Initiates the minimum required inputs.
+
+            A json configuration file named `params.json` is output with more variables.
+            These variables are set to the default settings in the LOFAR EoR production pipeline.
+            Take some time to confirm/change the config settings in the file.
+
+    Command 2:  Runs the pipeline
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+MANDATORY ARGUMENTS:
+    --obsid                         Observation ID. e.g L254874
+    --data.path                     The path where data is stored. Should be valid for all the nodeswhere data is distributed.
+    --cluster.nodes                 Node numbers where data is distributed as a comma separated string. e.g. "125,126,127,128,129" or a single number if using a single node. The last node in the list is the masternode.
+    --slots                         Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on DAWN.
+    -profile                        The configuration profile lists the tasks to be run and where to run them.                                               
+    --label                         An extra data string label, like "_R" or '_2022' previously used for LOFAR NCP data to refer to a specific processing season.
+
+
+OPTIONAL ARGUMENTS:
+    --ms_pattern                    A pattern matching the naming of the measurement sets to be processed.
+    --timechunks                    Stop after outputting this number of solutions. Otherwise calibrate full observation. Only available in mpi mode.
+    --help                          Display this usage statement, and exit.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
 """
 }
 
-// Show help message
+
+// Show help message and exit
 if (params.help) {
     helpMessage()
     exit 0
@@ -67,28 +101,28 @@ workflow {
     // flag and average to 002
     // FLAG_GEN_002_VIS(SET_NODES.out[0], SET_NODES.out[1])
 
+    //write out a txt file with all 002 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
 
+    // run mpi DI
     SAGECAL_MPI_DI(SET_NODES.out[0])
 
-
-    // ANALYSE_GAINS(SAGECAL_MPI_DI.out, "mpi_di")
-
-
+    //run bandpass
     SAGECAL_BANDPASS(SAGECAL_MPI_DI.out)
 
-
-    // ANALYSE_GAINS(SAGECAL_BANDPASS.out, "bandpass")
-
-    //average to 003
+    // average to 003
     GEN_003_VIS(SAGECAL_BANDPASS.out)
 
-    
+    //write out a txt file with all 003 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
+
+    //Run sagecal mpi DD
     SAGECAL_MPI_DD(GEN_003_VIS.out)
 
-
+    //Plot sagecal DD gains
     ANALYSE_GAINS(SAGECAL_MPI_DD.out, "mpi_dd")
 
-
+    //run pspipe
     POWER_SPECTRUM(SAGECAL_MPI_DD.out)
 
 }
@@ -103,7 +137,7 @@ workflow init {
 workflow VET_PARAMS {
     main:
         nodes_list  = parseNodes()
-        params_check_ch = checkingParams()
+        params_check_ch = CheckingParams()
 
         checkInitialDataDistribution(nodes_list)
 
@@ -114,7 +148,7 @@ workflow VET_PARAMS {
         
 
         //All params are available now
-        savingParams(params_check_ch.all_params_valid)
+        SavingParams(params_check_ch.all_params_valid)
 
         //only show params info after validating all params //TODO:
         // if (params.verbose){
@@ -122,7 +156,7 @@ workflow VET_PARAMS {
         // }
 
     emit:
-        savingParams.out.params_json_written
+        SavingParams.out.params_json_written
 }
 
 
@@ -133,16 +167,16 @@ workflow SET_NODES {
 
     main:
         if (params.tasks.contains("mpi_di") || params.tasks.contains("mpi_dd")) {
-            mpirun_ch = mpirunNodesList(params_json_written, nodes_list, params.cluster.slots, params.cluster.mpirun_hosts_txt_file)
-            psshNodesList(mpirun_ch.mpi_standby, nodes_list, params.cluster.pssh_hosts_txt_file)
+            mpirun_ch = MpiRunNodesList(params_json_written, nodes_list, params.cluster.slots, params.cluster.mpirun_hosts_txt_file)
+            PsshNodesList(mpirun_ch.mpi_standby, nodes_list, params.cluster.pssh_hosts_txt_file)
         }
         else if (params.tasks.contains("bandpass")) {
-            psshNodesList(params_json_written, nodes_list, params.cluster.pssh_hosts_txt_file)
+            PsshNodesList(params_json_written, nodes_list, params.cluster.pssh_hosts_txt_file)
         }
 
     emit:
-        psshNodesList.out.all_nodes_standby
-        psshNodesList.out.pssh_hosts_txt
+        PsshNodesList.out.all_nodes_standby
+        PsshNodesList.out.pssh_hosts_txt
 }
 
 
@@ -152,10 +186,10 @@ workflow FLAG_GEN_002_VIS  {
         pssh_hosts_txt
 
     main:
-        flagAverageVisTo002(all_nodes_standby, pssh_hosts_txt, params.gen_002_vis.nf_module, params.data.path, params.data.ms_files_001)
+        FlagAndAverageVisTo002(all_nodes_standby, pssh_hosts_txt, params.gen_002_vis.nf_module, params.data.path, params.data.ms_files_001)
     
     emit:
-        flagAverageVisTo002.out
+        FlagAndAverageVisTo002.out
 
 }
 
@@ -166,19 +200,19 @@ workflow SAGECAL_MPI_DI {
 
      main:
 
-        cp_ch = getModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
-        add_cols_ch = addMsColumn(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_002, params.mpi_di.output_column)
-        di_preprocess_ch = preProcess_di(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, params.data.ms_files_002, params.sim)
-        sage_mpi_di_ch = sagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
+        cp_ch = GetModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
+        add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.mpi_di.output_column)
+        di_preprocess_ch = ApplyPreDIFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.sim)
+        sage_mpi_di_ch = SagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
 
-        eff_ch = makeEffNr(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
+        eff_ch = MakeEffectiveClustersNumberFile(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
 
-        conv_ch = convertSageSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.data.path, params.mpi_di.stage_number)
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.data.path, params.mpi_di.stage_number)
 
-        convertSageZSol(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
-        plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
+        ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
     emit:
-        plotDISageSols.out
+        PlotSagecalDISolutions.out
 }
 
 
@@ -187,18 +221,21 @@ workflow SAGECAL_BANDPASS {
         sage_mpi_di_done
 
     main:
-        add_cols_ch = addMsColumn(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_002, params.bandpass.output_column)
+        add_cols_ch = AddColumnToMeasurementSet(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.output_column)
 
-        bandpass_ch = sagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, params.data.ms_files_002, params.bandpass.solsdir)
+        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir)
 
-        eff_ch = makeEffNr(bandpass_ch.sagecal_complete, params.bandpass.clusters_file)
+        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.bandpass.output_column, "all_sky_DI", "${params.data.path}/all_ms_files_002.txt")
 
-        conv_ch = convertSageSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.bandpass.solsdir, params.data.path, params.bandpass.stage_number)
+        eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file) //wsc_ch.wsclean_complete
 
-        plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.bandpass.solsdir, params.data.path, params.bandpass.stage_number)
+
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
+
 
     emit:
-        plotDISageSols.out
+        PlotSagecalDISolutions.out
 }
 
 
@@ -207,10 +244,10 @@ workflow GEN_003_VIS  {
         sagecal_bandpass_done
 
     main:
-        averageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, params.data.ms_files_002)
+        AverageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, "${params.data.path}/ms_files_002.txt")
 
     emit:
-        averageVisTo003.out
+        AverageVisTo003.out
 }
 
 
@@ -220,12 +257,14 @@ workflow SAGECAL_MPI_DD {
 
      main:
         //  the di run already copied the models so no need to copy again
-        // cp_ch = getModels(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.mpi_dd.sky_model, params.mpi_dd.clusters_file, params.mpi_dd.admm_rho_file, params.shapelets.modes, params.data.path)
-        add_cols_ch = addMsColumn(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.data.path, params.data.ms_files_003, params.mpi_dd.output_column)
-        dd_preprocess_ch = preProcessDD(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, params.data.ms_files_003, params.sim)
-        sagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
+        cp_ch = GetModels(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
+        add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
+        dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
+        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
+        ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.mpi_dd.output_column, "all_sky_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
-        sagecalMPI.out
+        SagecalMPI.out
+        // ImageWithWSClean.out.wsclean_complete
 }
 
 
@@ -236,36 +275,35 @@ workflow ANALYSE_GAINS {
         gains_type
 
     main:
-        eff_ch = makeEffNr(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file)
+        eff_ch = MakeEffectiveClustersNumberFile(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file)
 
-        conv_ch = convertSageSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params."${gains_type}".solsdir, params.data.path, params."${gains_type}".stage_number)
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params."${gains_type}".solsdir, params.data.path, params."${gains_type}".stage_number)
 
 
         if (gains_type=="mpi_di") {
-            convertSageZSol(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
-            plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
+            ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
+            PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
         }
         else if (gains_type=="mpi_dd") {
-                convertSageZSol(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.data.path)
-                plotDDSageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
+                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.data.path)
+                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
             }
 
         else if (gains_type=="bandpass") {
-                plotDISageSols(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
+                PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
             }
 }
-
 
 workflow POWER_SPECTRUM {
     take:
         sagecal_complete
 
     main:
-        allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
-        // init_ch = initPSDB(sagecal_complete, params.data.path)
-        rev_ch = addRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, params.pspipe.dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms) // TODO: stop using only the final node 
-        ps_ch = runPSPIPE(params.pspipe.dir, rev_ch.toml_file, params.data.obsid, params.data.all_ms_files_003, params.pspipe.merge_ms, params.pspipe.delay_flag, params.pspipe.ml_gpr)
-        // plotPS(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
+        // init_ch = InitPSDB(sagecal_complete, params.data.path)
+        ps_dir = "${params.data.path}/${params.pspipe.dir}"
+        rev_ch = AddRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, ps_dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms) // TODO: stop using only the final node 
+        ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flag, params.pspipe.ml_gpr)
+        // PlotPowerSpectrum(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
 }
 
 
@@ -273,7 +311,7 @@ workflow POWER_SPECTRUM {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Processes
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-process checkingParams {
+process CheckingParams {
 
     output:
     val true, emit: all_params_valid
@@ -283,7 +321,7 @@ process checkingParams {
 }
 
 
-process savingParams {
+process SavingParams {
     debug true
     publishDir params.logs_dir, mode: 'move'
 
@@ -301,7 +339,7 @@ process savingParams {
 }
 
 
-process mpirunNodesList {
+process MpiRunNodesList {
     // publishDir params.logs_dir
 
     input:
@@ -320,7 +358,7 @@ process mpirunNodesList {
 }
 
 
-process psshNodesList {
+process PsshNodesList {
     debug true
     // publishDir params.logs_dir
 
@@ -341,7 +379,7 @@ process psshNodesList {
 
 
 // copying the models fail when i provide them as path
-process getModels {
+process GetModels {
     debug true
 
     input:
@@ -358,7 +396,7 @@ process getModels {
     if (sim)
 
     """
-    echo "Info: We assume the simulation does not need the NCP shapelets model. Shout if otherwise!"
+    echo "[Info] We assume the simulation does not need the NCP shapelets model. Shout if otherwise!"
     """
 
     else
@@ -369,7 +407,7 @@ process getModels {
 }
 
 
-process preProcess_di {
+process ApplyPreDIFlag {
     debug true
 
     input:
@@ -387,7 +425,7 @@ process preProcess_di {
     if (sim)
 
     """
-    echo "Info: We assume the simulation does not need any visibilties flagging before DI calibration."
+    echo "[Info] We assume the simulation does not need any visibilties flagging before DI calibration."
     """
 
     else
@@ -397,7 +435,7 @@ process preProcess_di {
     """
 }
 
-process addMsColumn {
+process AddColumnToMeasurementSet {
     debug true
 
     input:
@@ -419,7 +457,7 @@ process addMsColumn {
 }
 
 
-process preProcessDD {
+process ApplyPreDDFlag {
     debug true
 
     input:
@@ -437,7 +475,7 @@ process preProcessDD {
     if (sim)
 
     """
-    echo "Info: We assume the simulation does not need any visibilties flagging before DD calibration."
+    echo "[Info] We assume the simulation does not need any visibilties flagging before DD calibration."
     """
 
     else
@@ -447,7 +485,7 @@ process preProcessDD {
     """
 }
 
-process flagAverageVisTo002 {
+process FlagAndAverageVisTo002 {
     debug true
 
     input:
@@ -467,7 +505,7 @@ process flagAverageVisTo002 {
 }
 
 
-process averageVisTo003 {
+process AverageVisTo003 {
     debug true
 
     input:
@@ -488,8 +526,8 @@ process averageVisTo003 {
 }
 
 
-// sagecalStandalone(true, params.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.standalone_sage_nf_file, params.ms_files)
-process sagecalStandalone {
+// SagecalStandalone(true, params.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.standalone_sage_nf_file, params.ms_files)
+process SagecalStandalone {
     debug true
     // errorStrategy 'ignore'
 
@@ -503,7 +541,7 @@ process sagecalStandalone {
     val solsdir
 
     output:
-    val true , emit: sagecal_complete
+    val true, emit: sagecal_complete
 
     script:
     """
@@ -512,10 +550,10 @@ process sagecalStandalone {
 }
 
 
-process sagecalMPI {
+process SagecalMPI {
     debug true
     cpus params.mpi_di.number_of_threads
-    time '1hour 30minutes'
+    // time '1hour 30minutes'
 
     input:
     val ready
@@ -540,6 +578,32 @@ process sagecalMPI {
     //the rm modes should give the absolute path
 }
 
+process ImageWithWSClean { 
+    publishDir "${params.data.path}/${name}_images", pattern: "*.fits", mode: "move", overwrite: true
+    publishDir "${params.data.path}/${name}_images", pattern: "*.png", mode: "move", overwrite: true
+
+    input:
+    val ready
+    val scale
+    val size
+    val datacolumn
+    val name
+    val msfyl
+
+    output:
+    val true , emit: wsclean_complete
+    path "*.fits"
+    path "*.png"
+
+    script:
+    List mslist = file(msfyl).readLines()
+    String mses = mslist.collect {"${it}"}.join(" ")
+    """
+    wsclean -data-column ${datacolumn} -gridder wgridder -wgridder-accuracy 1e-5 -reorder -make-psf -scale ${scale} -size ${size} ${size} -weight briggs -0.1 -minuv-l 50 -maxuv-l 300 -pol I -name ${name} -j 12 ${mses}  > ${params.logs_dir}/wsclean.log 2>&1
+    python3 ${projectDir}/templates/read_fits_image.py -i ${name}-image.fits
+    """
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Closures
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -550,7 +614,7 @@ def checkParams() {
 
     if (params.tasks.contains("ps")){
         dir = file("${params.data.path}/${params.pspipe.dir}", type: 'dir', checkIfExists: false) //I don't know how to make it fail if it already exists.
-        dir.exists() ? log.error("Error: ${params.data.path}/${params.pspipe.dir} pspipe fails if the ps dir already exists. Delete/change it in params.json and rerun") : log.info("Info: pspipe dir ${params.data.path}/${params.pspipe.dir} ")
+        dir.exists() ? log.info("[Info] ${params.data.path}/${params.pspipe.dir} ps dir already exists. will be overwritten!") : log.info("[Info] pspipe dir ${params.pspipe.dir} ")
     }
 }
 
@@ -560,7 +624,7 @@ Generate a sagecal command fo rthe different LOFAr EoR calibration stages
 def generateSagecalCommand() {
     if (params.tasks.contains("mpi_di")){
         params.mpi_di.ms_pattern = lofarDefaultMsnamePattern(params.mpi_di.stage_number)
-        params.mpi_di.sagecal_command =  sagecalMPIDICommand()
+        params.mpi_di.sagecal_command =  SagecalMPIDICommand()
     }
     if (params.tasks.contains("bandpass")){
         params.bandpass.ms_pattern = lofarDefaultMsnamePattern(params.bandpass.stage_number)
@@ -568,7 +632,7 @@ def generateSagecalCommand() {
     }
     if (params.tasks.contains("mpi_dd")){
         params.mpi_dd.ms_pattern = lofarDefaultMsnamePattern(params.mpi_dd.stage_number)
-        params.mpi_dd.sagecal_command =  sagecalMPIDDCommand()
+        params.mpi_dd.sagecal_command =  SagecalMPIDDCommand()
     }
 }
 
@@ -676,7 +740,7 @@ def getInitialStageNumber() {
     requested_tasks = getRequiredtasksStageNumbers()
     initial_stage_number = requested_tasks.min { it.value }.value
     initial_stage_number = String.format("%03d", initial_stage_number)
-    log.info("Info: initial stage number: ${initial_stage_number}")
+    log.info("[Info] initial stage number: ${initial_stage_number}")
     return initial_stage_number 
 }
 
@@ -697,7 +761,10 @@ def allMsetsPerStageNumber(stage_number, sub_bands_per_node){
     }
 
     txt = "/net/${params.cluster.masternode}/${params.data.path}/all_ms_files_${stage_number}.txt"
+
     writeListToTxt(txt, mses)
+
+    return txt
 }
 
 /*
@@ -740,7 +807,7 @@ write a single file listing all msets from all nodes
 def checkInitialDataDistribution(nodes_list) {
     initial_stage_number = getInitialStageNumber()
     initial_ms_pattern = lofarDefaultMsnamePattern(initial_stage_number)
-    log.info("Info: initial ms pattern: ${initial_ms_pattern}")
+    log.info("[Info] initial ms pattern: ${initial_ms_pattern}")
 
     params.data.sub_bands_per_node = [:]
 
@@ -779,7 +846,7 @@ def lofarDefaultMsnamePattern(stage_number) {
 
 def sagecalBandpassCommand() {
     // if (params.bandpass.sagecal_command) {
-    //     log.info("Info: using user provided sagecal bandpass command")
+    //     log.info("[Info] using user provided sagecal bandpass command")
     //     return params.bandpass.sagecal_command
     // }
     // else {
@@ -802,7 +869,6 @@ def sagecalBandpassCommand() {
 -L ${params.bandpass.robust_nu_lower} \
 -H ${params.bandpass.robust_nu_upper} \
 -W ${params.bandpass.pre_whiten} \
--U ${params.bandpass.apply_global_solution} \
 -k ${params.bandpass.gains_correction_cluster_id} \
 -a ${params.bandpass.action} \
 -D ${params.bandpass.enable_diagnostics} \
@@ -816,9 +882,9 @@ def sagecalBandpassCommand() {
     // }
 }
 
-def sagecalMPIDICommand(){
+def SagecalMPIDICommand(){
     // if (params.mpi_di.sagecal_command) {
-    //     log.info("Info: using user provided sagecal MPI DI command")
+    //     log.info("[Info] using user provided sagecal MPI DI command")
     //     return params.mpi_di.sagecal_command
     // }
     // else{
@@ -866,9 +932,9 @@ def sagecalMPIDICommand(){
 }
 
 
-def sagecalMPIDDCommand(){
+def SagecalMPIDDCommand(){
     // if (params.mpi_dd.sagecal_command) {
-    //     log.info("Info: using user provided sagecal MPI DD command")
+    //     log.info("[Info] using user provided sagecal MPI DD command")
     //     return params.mpi_dd.sagecal_command
     // }
     // else {
@@ -905,6 +971,10 @@ def sagecalMPIDDCommand(){
         sage_mpi_dd_command = sage_mpi_dd_command.replace("-G ${params.mpi_dd.admm_rho_file}", "-r ${params.mpi_dd.constant_rho_value}")
     }
 
+    if (params.mpi_dd.enable_spatial_reg){
+        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${params.mpi_dd.logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.alpha} -V > ${params.mpi_dd.logfile}")
+    }
+
         mpi_command = make_mpi_command()
 
         mpi_dd_command = mpi_command.strip() + " " +  sage_mpi_dd_command.strip()
@@ -927,5 +997,3 @@ def writeListToTxt (txt_file_name, list_of_strings) {
         list_of_strings.each {out.println it}
     }
 }
-
-

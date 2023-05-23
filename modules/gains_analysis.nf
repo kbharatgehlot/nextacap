@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 
-process makeEffNr {
+process MakeEffectiveClustersNumberFile {
     publishDir params.data.path
     errorStrategy 'ignore'
 
@@ -18,7 +18,7 @@ process makeEffNr {
     """
 }
 
-process convertSageSolutions {
+process ConvertSagecalSolutions {
     debug true
     publishDir params.data.path
     errorStrategy 'ignore'
@@ -50,7 +50,7 @@ process convertSageSolutions {
 }
 
 
-process convertSageZSol {
+process ConvertSagecalGlobalSolutions {
     debug true
     publishDir params.data.path
     errorStrategy 'ignore'
@@ -76,7 +76,7 @@ process convertSageZSol {
 }
 
 
-process plotDDSageSols {
+process PlotSagecalDDSolutions {
     debug true
     publishDir params.data.path
     errorStrategy 'ignore'
@@ -104,7 +104,7 @@ process plotDDSageSols {
     """
 }
 
-process plotDISageSols {
+process PlotSagecalDISolutions {
     debug true
     publishDir params.data.path
     errorStrategy 'ignore'

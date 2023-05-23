@@ -149,11 +149,14 @@ def plot_abs_and_phase(freqs, d, pols, out_dir, prefix):
 
             if i == 0 and j == 0:
                 vmax = np.median(abs(gg)) + 10 * astats.mad_std(abs(gg).flatten())
-                vmin = 1e-3 * vmax
+                vmin = 1e-1 * vmax
 
             g_map = axs[i, j].imshow(abs(gg), aspect='auto', norm=LogNorm(vmin=vmin, vmax=vmax), extent=extent)
             p_map = axs2[i, j].imshow(np.angle(gg), aspect='auto', vmin=-np.pi, vmax=np.pi, extent=extent)
 
+            axs[i, j].text(0.05, 0.95, 'Median: %.4g' % np.median(abs(gg)), transform=axs[i,j].transAxes, va='top', ha='left')
+            axs2[i, j].text(0.05, 0.95, 'Median: %.4g' % np.median(np.angle(gg)), transform=axs2[i,j].transAxes, va='top', ha='left')
+            
             for ax in [axs, axs2]:
                 if j != 0:
                     ax[i, j].yaxis.set_ticklabels([])

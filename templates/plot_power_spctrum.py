@@ -31,7 +31,7 @@ data = rev.get_data(args.obsid)
 
 
 ps_gen = data.get_ps_gen(
-    rmean_freqs=True, umax=250, umin=50, du=8, window_fct="hann", eor_bin_name="2"
+    rmean_freqs=True, umax=250, umin=50, du=8, window_fct="hann", eor_bin_name="1"
 )
 # ps_gen.get_ps2d(data.i).plot(vmin=2e1, vmax=1e4)
 

@@ -6,7 +6,7 @@ data_dir = ""
 [worker]
 nodes = ""
 max_concurrent = 4
-env_file = ""
+env_file = "/home/users/mertens/.activate_pspipe.sh"
 run_on_file_host = true
 run_on_file_host_pattern = ""
 

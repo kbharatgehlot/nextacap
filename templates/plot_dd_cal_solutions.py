@@ -55,11 +55,16 @@ stations = [int(i) for i in args.stations[0].split(",")]
 
 clusters = [int(clst) for clst in args.clusterlist[0].split(",")]
 
+# print()
+
 try:
     clusters_names = [str(clstn) for clstn in args.clusternames[0].split(",")]
-    assert len(clusters)==len(cluster_names), "mismatch between number of cluster indices and cluster names"
+    print(clusters, clusters_names)
+    assert len(clusters)==len(clusters_names), "mismatch between number of cluster indices and cluster names"
 except:
-    cluster_names = [str(s) for s in clusters]
+    clusters_names = [str(s) for s in clusters]
+
+print("Plotting gains for [stations, clusters, clusters_names]", stations, clusters, clusters_names)
 
 pols = dict(zip(["XX", "YY", "XY", "YX"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
 pol_stokes = dict(zip(["I", "V", "U", "Q"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
@@ -233,6 +238,7 @@ def do_plot(
     else:
         norm = Normalize(vmin=vmin, vmax=vmax)
 
+
     for i, cluster in enumerate(clusters):
         if (stations[0], cluster) not in gain_data.keys():
             print((stations[0], cluster), "not in", gain_data.keys())
@@ -242,7 +248,7 @@ def do_plot(
             g_map = axs[i, j].imshow(
                 g,
                 aspect="auto",
-                extent=[freqs[0], freqs[-1], 0, g.shape[0] - 1],
+                # extent=[freqs[0], freqs[-1], 0, g.shape[0] - 1],
                 norm=norm,
             )
             if j != 0:
