@@ -3,42 +3,52 @@
 // params.outdir = "${launchDir}"
 params.ms_files = null
 
+
 process copyFlags {
     debug true
-    cpus 12
+    //cpus 12
 
     input:
     path ms
 
+    output:
+    path "${ms}"
+
+    // sleep 60s
     script:
     """
     python3  /home/users/chege/theleap/leap/templates/cp_flag_col.py -i ${ms} -t table.f4_TSM0 -o table.f4_TSM0_copy
-    sleep 60s
     """
 }
 
 
 process copyFlagsBack {
     debug true
-    cpus 12
+    //cpus 12
 
     input:
     path ms
 
+    output:
+    path "${ms}"
+
+    // sleep 60s
     script:
     """
     python3  /home/users/chege/theleap/leap/templates/cp_flag_col.py -i ${ms} -t table.f4_TSM0_copy -o table.f4_TSM0
-    sleep 60s
     """
 }
 
 
 process scaleData {
     debug true
-    cpus 12
+    //cpus 12
 
     input:
     path ms
+
+    output: 
+    path "${ms}"
 
     script:
     """
@@ -50,15 +60,15 @@ process scaleData {
 
 process clipData {
     debug true
-    cpus 12
+    //cpus 12
 
     input:
     path ms
 
     output:
-    val ms
+    path "${ms}"
 
-    // --flag_longbaselines
+
     """
     python3 /home/users/chege/theleap/leap/templates/clip_data.py -i ${ms} --flag_intrastations --flag_badbaselines -o DATA 
     """
