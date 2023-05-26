@@ -3,16 +3,50 @@
 // params.outdir = "${launchDir}"
 params.ms_files = null
 
+process copyFlags {
+    debug true
+    cpus 12
+
+    input:
+    path ms
+
+    script:
+    """
+    python3  /home/users/chege/theleap/leap/templates/cp_flag_col.py -i ${ms} -t table.f4_TSM0 -o table.f4_TSM0_copy
+    sleep 60s
+    """
+}
+
+
 process copyFlagsBack {
+    debug true
+    cpus 12
+
     input:
     path ms
 
     script:
     """
     python3  /home/users/chege/theleap/leap/templates/cp_flag_col.py -i ${ms} -t table.f4_TSM0_copy -o table.f4_TSM0
-    sleep 100s
+    sleep 60s
     """
 }
+
+
+process scaleData {
+    debug true
+    cpus 12
+
+    input:
+    path ms
+
+    script:
+    """
+    python3 /home/users/chege/theleap/leap/templates/scaledata.py -i ${ms} -f 0
+    """
+
+}
+
 
 process clipData {
     debug true
@@ -34,32 +68,13 @@ workflow {
     _ = file(params.ms_files, glob: false, checkIfExists: true) //check it exists
     def msetsList = new File(params.ms_files).collect {it}
     msets_ch = Channel.fromList(msetsList)
-    copyFlagsBack(msets_ch)
-    clip_ch = clipData(msets_ch).collect()
+    copy_flags_ch = copyFlags(msets_ch)
+    copy_flags_back_ch = copyFlagsBack(copy_flags_ch)
+    scale_data_ch = scaleData(copy_flags_back_ch)
+    clip_ch = clipData(scale_data_ch).collect()
 }
 
 
-
-// process copyFlags {
-//     input:
-//     path ms
-
-//     script:
-//     """
-//     python3  /home/users/chege/cp_flag_col.py -i ${ms}
-//     """
-// }
-
-// process scaleData {
-//     input:
-//     path ms
-
-//     script:
-//     """
-//     python3 /home/users/chege/pipeline/scaledata.py ${ms}
-//     """
-
-// }
 
 // process fixBeamInfo {
 //     input:
