@@ -66,14 +66,12 @@ MANDATORY ARGUMENTS:
     --obsid                         Observation ID. e.g L254874
     --data.path                     The path where data is stored. Should be valid for all the nodeswhere data is distributed.
     --cluster.nodes                 Node numbers where data is distributed as a comma separated string. e.g. "125,126,127,128,129" or a single number if using a single node. The last node in the list is the masternode.
-    --slots                         Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on DAWN.
+    --cluster.slots                         Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on DAWN.
     -profile                        The configuration profile lists the tasks to be run and where to run them.                                               
-    --label                         An extra data string label, like "_R" or '_2022' previously used for LOFAR NCP data to refer to a specific processing season.
+    --label                         An extra data string label, like "R" or '2022' previously used for LOFAR NCP data to refer to a specific processing season.
 
 
 OPTIONAL ARGUMENTS:
-    --ms_pattern                    A pattern matching the naming of the measurement sets to be processed.
-    --timechunks                    Stop after outputting this number of solutions. Otherwise calibrate full observation. Only available in mpi mode.
     --help                          Display this usage statement, and exit.
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 
@@ -339,6 +337,27 @@ process SavingParams {
 }
 
 
+/*
+A task to write out the input MPIRUN text file specifying the nodes to run on 
+Also specifies the GPUs pto be used per node (`slots`)
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+nodes : list
+    A list of nodes to be used
+slots : int
+    Number of GPUs per to be used per node
+mpirun_hosts_txt_file : string
+    The path of the output txt file
+
+Returns
+-------
+mpirun_hosts_txt_file : path
+    The path to the output file
+
+*/
 process MpiRunNodesList {
     // publishDir params.logs_dir
 
@@ -358,6 +377,27 @@ process MpiRunNodesList {
 }
 
 
+/*
+A task to write out the input PSSH (Parallel SSH tool) text file specifying the nodes to run on.
+See `https://manpages.ubuntu.com/manpages/trusty/man1/parallel-ssh.1.html`
+
+Calls the `write_nodes_for_pssh` function
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+nodes : list
+    A list of nodes to be used
+pssh_hosts_txt_file : string
+    The path of the output txt file
+
+Returns
+-------
+pssh_hosts_txt_file : path
+    The path to the output file
+
+*/
 process PsshNodesList {
     debug true
     // publishDir params.logs_dir
@@ -371,14 +411,35 @@ process PsshNodesList {
     val "${pssh_hosts_txt_file}", emit:  pssh_hosts_txt
     val true, emit: all_nodes_standby
 
-    // seq  -f "node%g" ${first_node} ${last_node} > pssh_hosts_txt_file.txt
     exec:
 
     write_nodes_for_pssh(nodes, pssh_hosts_txt_file)
 }
 
 
-// copying the models fail when i provide them as path
+/*
+A task to distribute shapelet files required for the current NCP sky model
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+shapelets_modes : string
+    A path to the shapelets files
+    default : "${projectDir}/models/shapelets_modes/*modes"
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+sim: boolean
+    if `true`, then we do not need the shapelets
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process GetModels {
     debug true
 
@@ -407,6 +468,34 @@ process GetModels {
 }
 
 
+/*
+A task to apply pre-DI flagging on the data 
+Spawns a standalone nextflow job on each node using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+preprocessing_file : path
+    A standalone nextflow file that does the actual flagging
+    default : "${projectDir}/modules/di_high_reg_preprocessing.nf"
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+sim: boolean
+    if `true`, then we do not need the shapelets
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process ApplyPreDIFlag {
     debug true
 
@@ -435,6 +524,32 @@ process ApplyPreDIFlag {
     """
 }
 
+
+/*
+A task to add a column to a measurement set 
+calls `${projectDir}/modules/add_ms_col.nf` using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+column: string
+    Name of the column to be added
+    
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process AddColumnToMeasurementSet {
     debug true
 
@@ -443,7 +558,7 @@ process AddColumnToMeasurementSet {
     val pssh_hosts_txt_file
     val datapath
     val ms_files
-    val col
+    val column
   
 
     output:
@@ -452,11 +567,39 @@ process AddColumnToMeasurementSet {
     script:
 
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${projectDir}/modules/add_ms_col.nf --ms_files ${ms_files} --col ${col} > ${params.logs_dir}/add_${col}_column.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ~/mysoftware/nextflow run ${projectDir}/modules/add_ms_col.nf --ms_files ${ms_files} --col ${column} > ${params.logs_dir}/add_${column}_column.log 2>&1
     """
 }
 
 
+/*
+A task to apply pre-DD flagging on the data 
+Spawns a standalone nextflow job on each node using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+preprocessing_file : path
+    A standalone nextflow file that does the actual flagging
+    default : "${projectDir}/modules/dd_high_reg_preprocessing.nf"
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+sim: boolean
+    if `true`, then we do not need the shapelets
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process ApplyPreDDFlag {
     debug true
 
@@ -485,6 +628,33 @@ process ApplyPreDDFlag {
     """
 }
 
+
+/*
+A task to flag and average data before DI calibration
+Spawns a standalone nextflow job on each node using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+dp3_average_to_002_file : path
+    A standalone nextflow file that does the actual averaging and flagging
+    default : "${projectDir}/modules/gen_002_vis.nf"
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process FlagAndAverageVisTo002 {
     debug true
 
@@ -505,6 +675,32 @@ process FlagAndAverageVisTo002 {
 }
 
 
+/*
+A task to average data before DD calibration
+Spawns a standalone nextflow job on each node using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+dp3_average_to_002_file : path
+    A standalone nextflow file that does the actual averaging and flagging
+    default : "${projectDir}/modules/gen_003_vis.nf"
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process AverageVisTo003 {
     debug true
 
@@ -526,7 +722,38 @@ process AverageVisTo003 {
 }
 
 
-// SagecalStandalone(true, params.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.standalone_sage_nf_file, params.ms_files)
+/*
+A task to run sagecal in standalone mode (No regularisation)
+Spawns a standalone nextflow job on each node using PSSH
+
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+command : string
+    The sagecal command to run
+    Made using `generateSagecalCommand()`
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+standalone_sage_nf_file : path
+    A standalone nextflow file that runs the actual sagecal job
+    default : "${projectDir}/standalone.nf"
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+solsdir: path
+    A path to where the solutions will be stored
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process SagecalStandalone {
     debug true
     // errorStrategy 'ignore'
@@ -549,7 +776,39 @@ process SagecalStandalone {
     """
 }
 
+/*
+A task to run sagecal in MPI mode (With regularisation, Either DI or DD)
+Spawns a standalone nextflow job on each node using PSSH
 
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+sagecal_command : string
+    The sagecal command to run
+    Made using `generateSagecalCommand()`
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+standalone_sage_nf_file : path
+    A standalone nextflow file that runs the actual sagecal job
+    default : "${projectDir}/standalone.nf"
+solsdir: path
+    A path to where the solutions will be stored
+ms_pattern: string
+    A glob pattern for the measurement sets
+    Made by `lofarDefaultMsnamePattern(stage_number)` for a given processing stage
+    used to access sagecal `MS.solutions` files and move them to `solsdir`
+
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
 process SagecalMPI {
     debug true
     cpus params.mpi_di.number_of_threads
@@ -578,6 +837,37 @@ process SagecalMPI {
     //the rm modes should give the absolute path
 }
 
+
+/*
+A task to run wsclean
+#TODO: add more options
+#TODO: make all_sky_plotting and stats optional
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+scale : string
+    -scale
+size : string
+    size
+datacolumn : 
+    -data-column
+name : path
+    -name
+ms_fyl: path
+    Measurement set
+
+Returns
+-------
+true : bool
+    The task was successful
+*.fits: paths
+    fits images
+*.png : paths
+    all-sky plot
+
+*/
 process ImageWithWSClean { 
     publishDir "${params.data.path}/${name}_images", pattern: "*.fits", mode: "move", overwrite: true
     publishDir "${params.data.path}/${name}_images", pattern: "*.png", mode: "move", overwrite: true
@@ -615,24 +905,6 @@ def checkParams() {
     if (params.tasks.contains("ps")){
         dir = file("${params.data.path}/${params.pspipe.dir}", type: 'dir', checkIfExists: false) //I don't know how to make it fail if it already exists.
         dir.exists() ? log.info("[Info] ${params.data.path}/${params.pspipe.dir} ps dir already exists. will be overwritten!") : log.info("[Info] pspipe dir ${params.pspipe.dir} ")
-    }
-}
-
-/*
-Generate a sagecal command fo rthe different LOFAr EoR calibration stages
-*/
-def generateSagecalCommand() {
-    if (params.tasks.contains("mpi_di")){
-        params.mpi_di.ms_pattern = lofarDefaultMsnamePattern(params.mpi_di.stage_number)
-        params.mpi_di.sagecal_command =  SagecalMPIDICommand()
-    }
-    if (params.tasks.contains("bandpass")){
-        params.bandpass.ms_pattern = lofarDefaultMsnamePattern(params.bandpass.stage_number)
-        params.bandpass.sagecal_command =  sagecalBandpassCommand()
-    }
-    if (params.tasks.contains("mpi_dd")){
-        params.mpi_dd.ms_pattern = lofarDefaultMsnamePattern(params.mpi_dd.stage_number)
-        params.mpi_dd.sagecal_command =  SagecalMPIDDCommand()
     }
 }
 
@@ -844,6 +1116,25 @@ def lofarDefaultMsnamePattern(stage_number) {
 }
 
 
+/*
+Generate a sagecal command for the different LOFAR EoR calibration stages
+*/
+def generateSagecalCommand() {
+    if (params.tasks.contains("mpi_di")){
+        params.mpi_di.ms_pattern = lofarDefaultMsnamePattern(params.mpi_di.stage_number)
+        params.mpi_di.sagecal_command =  SagecalMPIDICommand()
+    }
+    if (params.tasks.contains("bandpass")){
+        params.bandpass.ms_pattern = lofarDefaultMsnamePattern(params.bandpass.stage_number)
+        params.bandpass.sagecal_command =  sagecalBandpassCommand()
+    }
+    if (params.tasks.contains("mpi_dd")){
+        params.mpi_dd.ms_pattern = lofarDefaultMsnamePattern(params.mpi_dd.stage_number)
+        params.mpi_dd.sagecal_command =  SagecalMPIDDCommand()
+    }
+}
+
+
 def sagecalBandpassCommand() {
     // if (params.bandpass.sagecal_command) {
     //     log.info("[Info] using user provided sagecal bandpass command")
@@ -990,7 +1281,7 @@ def make_mpi_command() {
 }
 
 
-//Given a list_of_strings, write out a .txt file with each string per line 
+//Given a list_of_strings, write out a .txt file with each string per line
 def writeListToTxt (txt_file_name, list_of_strings) {
         File txt_file = new File(txt_file_name)
         txt_file.withWriter{ out ->

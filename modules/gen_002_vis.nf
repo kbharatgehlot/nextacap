@@ -40,7 +40,7 @@ process flagGen002Vis {
     avg1.freqstep = 5
     avg1.timestep = 1
     EOL
-    #DP3 "!{ms001.Name}_flag_avg_to_002.parset"
+    DP3 "!{ms001.Name}_flag_avg_to_002.parset"
     '''
     //same as writing this inside a bash script and calling it thisway
     // template '/home/users/chege/theleap/leap/templates/avgto003.sh'
