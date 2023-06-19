@@ -21,7 +21,11 @@ workflow {
 process runSagecalStandalone {
     debug true
     // cpus params.number_of_threads
-    errorStrategy { task.exitStatus == 139 ? 'retry' : 'terminate' } //134 is core dumping error
+    // errorStrategy { task.exitStatus == 139 ? 'retry' : 'terminate' } //134 is core dumping error
+
+    errorStrategy 'retry'
+    maxRetries 4
+    
     publishDir "${params.outdir}/bandpass_logs", pattern: "*bandpass.log", mode: "move", overwrite: true
     publishDir "${solsdir}", pattern: "*.solutions", mode: "move", overwrite: true
     label 'parallel_jobs'

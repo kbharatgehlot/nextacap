@@ -8,14 +8,14 @@ type=FreqsSigmaClipFlagger
 action=filter
 stokes=V
 sefd=T
-nsigma=3.5
+nsigma=5
 
 [frequency_i_variance]
 type=FreqsSigmaClipFlagger
 action=filter
 stokes=I
 sefd=F
-nsigma=4
+nsigma=6
 
 [uv_weights]
 type=UVWeightsFlagger
@@ -42,7 +42,7 @@ sefd=F
 [uv_df_i_variance]
 type=UVSigmaClipFlagger
 action=filter
-nsigma=3
+nsigma=5
 detrend_poly_deg=0
 stokes=dI
 sefd=T
@@ -78,8 +78,7 @@ freqs=155.5-157.5
 [flagger]
 #pipeline=fixed_band,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_tau,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
 #pipeline=fixed_band,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
-pipeline=fixed_band,uv_df_i_outliers,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
+#pipeline=fixed_band,uv_df_i_outliers,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
 #pipeline=fixed_band,uv_df_i_outliers,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_v_sefd,uv_df_i_variance,uv_i_variance
 #pipeline=uv_df_i_outliers,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
-
-
+pipeline=fixed_band,frequency_weights,frequency_v_sefd,frequency_i_variance,uv_weights,uv_cyga,uv_casa,uv_v_sefd,uv_df_i_variance,uv_i_variance
