@@ -37,16 +37,10 @@ parser.add_argument(
     help="clusters indices to plot gains of",
 )
 parser.add_argument(
-    "--clusternames",
-    nargs="+",
-    help="clusters names to plot",
-    required=False
+    "--clusternames", nargs="+", help="clusters names to plot", required=False
 )
 parser.add_argument(
-    "--stations",
-    nargs="+",
-    help="station indices to plot gains of",
-    required=False
+    "--stations", nargs="+", help="station indices to plot gains of", required=False
 )
 
 args = parser.parse_args(sys.argv[1:])
@@ -60,11 +54,18 @@ clusters = [int(clst) for clst in args.clusterlist[0].split(",")]
 try:
     clusters_names = [str(clstn) for clstn in args.clusternames[0].split(",")]
     print(clusters, clusters_names)
-    assert len(clusters)==len(clusters_names), "mismatch between number of cluster indices and cluster names"
+    assert len(clusters) == len(
+        clusters_names
+    ), "mismatch between number of cluster indices and cluster names"
 except:
     clusters_names = [str(s) for s in clusters]
 
-print("Plotting gains for [stations, clusters, clusters_names]", stations, clusters, clusters_names)
+print(
+    "Plotting gains for [stations, clusters, clusters_names]",
+    stations,
+    clusters,
+    clusters_names,
+)
 
 pols = dict(zip(["XX", "YY", "XY", "YX"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
 pol_stokes = dict(zip(["I", "V", "U", "Q"], [[0, 0], [1, 1], [0, 1], [1, 0]]))
@@ -175,10 +176,10 @@ def get_gains(d, cluster, station, eff_nr):
 
 
 def cov2stokes(R):
-    I = 0.5 * R[:, :, 0, 0] + R[:, :, 1, 1]
-    V = 0.5 * -1j * (R[:, :, 0, 1] - R[:, :, 1, 0])
-    Q = 0.5 * R[:, :, 0, 0] - R[:, :, 1, 1]
-    U = 0.5 * R[:, :, 0, 1] + R[:, :, 1, 0]
+    I = 0.5 * (R[:, :, 0, 0] + R[:, :, 1, 1])
+    V = 0.5 * (-1j * (R[:, :, 0, 1] - R[:, :, 1, 0]))
+    Q = 0.5 * (R[:, :, 0, 0] - R[:, :, 1, 1])
+    U = 0.5 * (R[:, :, 0, 1] + R[:, :, 1, 0])
 
     return I, Q, U, V
 
@@ -237,7 +238,6 @@ def do_plot(
         norm = LogNorm(vmin=vmin, vmax=vmax)
     else:
         norm = Normalize(vmin=vmin, vmax=vmax)
-
 
     for i, cluster in enumerate(clusters):
         if (stations[0], cluster) not in gain_data.keys():
