@@ -520,7 +520,7 @@ process ApplyPreDIFlag {
     else
 
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_di.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_di.log 2>&1
     """
 }
 
@@ -567,7 +567,7 @@ process AddColumnToMeasurementSet {
     script:
 
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${projectDir}/modules/add_ms_col.nf --ms_files ${ms_files} --col ${column} > ${params.logs_dir}/add_${column}_column.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${projectDir}/modules/add_ms_col.nf --ms_files ${ms_files} --col ${column} > ${params.logs_dir}/add_${column}_column.log 2>&1
     """
 }
 
@@ -624,7 +624,7 @@ process ApplyPreDDFlag {
     else
 
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_dd.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${preprocessing_file} --ms_files ${ms_files} > ${params.logs_dir}/preprocessing_dd.log 2>&1
     """
 }
 
@@ -670,7 +670,7 @@ process FlagAndAverageVisTo002 {
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${dp3_average_to_002_file} --ms_files ${ms_files} > ${params.logs_dir}/flag_average_to_002.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_002_file} --ms_files ${ms_files} > ${params.logs_dir}/flag_average_to_002.log 2>&1
     """
 }
 
@@ -717,7 +717,7 @@ process AverageVisTo003 {
     script:
     //--ms_files ${ms_files}
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${dp3_average_to_003_file} --path ${datapath} > ${params.logs_dir}/average_to_003.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_003_file} --path ${datapath} > ${params.logs_dir}/average_to_003.log 2>&1
     """
 }
 
@@ -772,7 +772,7 @@ process SagecalStandalone {
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" /home/users/chege/mysoftware/nextflow run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
 
