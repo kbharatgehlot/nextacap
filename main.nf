@@ -223,7 +223,7 @@ workflow SAGECAL_BANDPASS {
 
         bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir)
 
-        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.bandpass.output_column, "all_sky_DI", "${params.data.path}/all_ms_files_002.txt")
+        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "all_sky_DI", "${params.data.path}/all_ms_files_002.txt")
 
         eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file) //wsc_ch.wsclean_complete
 
@@ -259,7 +259,7 @@ workflow SAGECAL_MPI_DD {
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
         dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
         SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
-        ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.mpi_dd.output_column, "all_sky_DD", "${params.data.path}/all_ms_files_003.txt")
+        ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "all_sky_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
         SagecalMPI.out
         // ImageWithWSClean.out.wsclean_complete
@@ -876,6 +876,11 @@ process ImageWithWSClean {
     val ready
     val scale
     val size
+    val weight
+    val minuv_lambda
+    val maxuv_lambda
+    val polarisation
+    val threads
     val datacolumn
     val name
     val msfyl
@@ -889,7 +894,7 @@ process ImageWithWSClean {
     List mslist = file(msfyl).readLines()
     String mses = mslist.collect {"${it}"}.join(" ")
     """
-    wsclean -data-column ${datacolumn} -gridder wgridder -wgridder-accuracy 1e-5 -reorder -make-psf -scale ${scale} -size ${size} ${size} -weight briggs -0.1 -minuv-l 50 -maxuv-l 300 -pol I -name ${name} -j 12 ${mses}  > ${params.logs_dir}/wsclean.log 2>&1
+    wsclean -data-column ${datacolumn} -gridder wgridder -wgridder-accuracy 1e-5 -reorder -make-psf -scale ${scale} -size ${size} ${size} -weight ${wight} -minuv-l ${minuv_lambda} -maxuv-l ${maxuv_lambda} -pol ${polarisation} -name ${name} -j ${threads} ${mses}  > ${params.logs_dir}/wsclean.log 2>&1
     python3 ${projectDir}/templates/read_fits_image.py -i ${name}-image.fits
     """
 }
