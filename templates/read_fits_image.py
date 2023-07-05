@@ -210,19 +210,6 @@ class Image(object):
         ax2.set_ylabel("Dec [deg]")
         plt.grid(ls="dotted", color="black")
 
-        # TODO: Fix these hacks
-        cx, cy = plot_data.shape[0] // 2, plot_data.shape[1] // 2
-        circle = plt.Circle((cx, cy), 450, color="k", fill=False, lw=2)
-        ax.add_patch(circle)
-
-        casAx, casAy = plot_data.shape[0] // 2 + 150, plot_data.shape[1] // 4
-        circle = plt.Circle((casAx, casAy), 250, color="k", fill=False, lw=2)
-        ax.add_patch(circle)
-
-        cx, cy = cx - 60, cy - 60
-        rect = plt.Rectangle((cx, cy), 120, 120, color="k", fc="none", lw=2)
-        ax.add_patch(rect)
-
         fig.tight_layout()
         if save:
             if figname is None:
