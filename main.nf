@@ -300,7 +300,7 @@ workflow POWER_SPECTRUM {
         // init_ch = InitPSDB(sagecal_complete, params.data.path)
         ps_dir = "${params.data.path}/${params.pspipe.dir}"
         rev_ch = AddRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, ps_dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms) // TODO: stop using only the final node 
-        ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flag, params.pspipe.ml_gpr)
+        ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flagger, params.pspipe.vis_flagger, params.pspipe.gpr, params.pspipe.ml_gpr)
         // PlotPowerSpectrum(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
 }
 
