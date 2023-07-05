@@ -223,7 +223,7 @@ workflow SAGECAL_BANDPASS {
 
         bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir)
 
-        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "all_sky_DI", "${params.data.path}/all_ms_files_002.txt")
+        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
 
         eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file) //wsc_ch.wsclean_complete
 
