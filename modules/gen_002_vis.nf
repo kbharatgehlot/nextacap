@@ -1,23 +1,16 @@
 
 #!/usr/bin/env nextflow
 
-#!/usr/bin/env nextflow
-
-params.obsid="L254871" //null
-params.datapath = "/data/users/lofareor/chege/psp/test" //null
+params.path = null
 params.msfiles=null
-params.label=null
 
 params.number_of_threads = 12
 
 process flagGen002Vis {
-    publishDir "${params.datapath}"
-    cpus params.number_of_threads
-    debug true
+    publishDir "${params.path}" mode: 'move'
 
     input:
     path ms001
-    val label
 
     output:
     val true
@@ -33,7 +26,7 @@ process flagGen002Vis {
     msin.nchan = 15
     msin.datacolumn = DATA
     msout.datacolumn = DATA
-    steps = [flag1,avg1]
+    steps = [flag1,interpolate,avg1]
     flag1.type=aoflagger
     flag1.memoryperc=20
     avg1.type =average
