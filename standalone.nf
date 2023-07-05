@@ -48,6 +48,41 @@ process runSagecalStandalone {
     """
 }
 
+
+workflow Predict {
+    // Check that we have the 'params.ms_files' list and load it into a channel
+    _ = file(params.ms_files, glob: false, checkIfExists: true) //check it exists
+    def msetsList = new File(params.ms_files).collect {it}
+    msets_channel = Channel.fromList(msetsList)
+
+    predict_channel = runSagecalStandalonePredict(msets_channel, params.shapelets.modes).collect()
+}
+
+
+process runSagecalStandalonePredict {
+    debug true
+    errorStrategy 'retry'
+    maxRetries 2
+    label 'parallel_jobs'
+    // publishDir "${params.outdir}/logs", pattern: "*predict.log", mode: "move", overwrite: true
+
+    input:
+    path ms
+    val modes
+
+    output:
+    path "*predict.log" // tuple  val(true)
+
+    script:
+    standalone_sagecal_command = make_standalone_sagecal_command() + " -d ${ms}"
+
+    // cp ${modes} \$PWD
+    """
+    ${standalone_sagecal_command} > "${ms.Name}_predict.log"  2>&1
+    """
+}
+
+
 def make_standalone_sagecal_command() {
     return params.command
 }
