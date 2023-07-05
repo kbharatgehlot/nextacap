@@ -272,6 +272,7 @@ workflow ANALYSE_GAINS {
         gains_type
 
     main:
+
         eff_ch = MakeEffectiveClustersNumberFile(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file)
 
         conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params."${gains_type}".solsdir, params.data.path, params."${gains_type}".stage_number)
@@ -290,6 +291,7 @@ workflow ANALYSE_GAINS {
                 PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
             }
 }
+
 
 workflow POWER_SPECTRUM {
     take:
@@ -1030,6 +1032,7 @@ def allMsetsPerStageNumber(stage_number, sub_bands_per_node){
     mses = []
     for (node in sub_bands_per_node) {
         for (sb in node.value) {
+            sb = String.format("%03d", sb)
             fyl = lofarDefaultMsnamePattern(stage_number).replace("???", "${sb}")
             full_fyl_path = "/net/${node.key}${params.data.path}/${fyl}"
             mses.add(full_fyl_path)
@@ -1063,6 +1066,7 @@ def _writeMSListPerNodeStageNumber(stage_number, sub_bands_per_node){
         mses = []
         txt = "/net/${node.key}/${params.data.path}/ms_files_${stage_number}.txt"
         for (sb in node.value) {
+            sb = String.format("%03d", sb)
             prefix = lofarDefaultMsnamePattern(stage_number).replace("???", "${sb}")
             ms = "/net/${node.key}/${params.data.path}/${prefix}"
             mses.add(ms)
