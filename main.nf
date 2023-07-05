@@ -810,7 +810,7 @@ true : bool
 */
 process SagecalMPI {
     debug true
-    cpus params.mpi_di.number_of_threads
+    cpus params.mpi_dd.number_of_threads
     // time '1hour 30minutes'
 
     input:
