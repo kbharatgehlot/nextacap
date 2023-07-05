@@ -14,7 +14,7 @@ process clipData {
     val ms
 
     """
-    python3 /home/users/chege/theleap/leap/templates/clip_data.py -i ${ms} -o DATA
+    python3 /home/users/chege/theleap/leap/templates/clip_data.py -i ${ms} --flag_intrastations --flag_badbaselines -o DATA
     """
 }
 
