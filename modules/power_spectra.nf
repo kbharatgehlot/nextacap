@@ -125,6 +125,8 @@ process RunPSPIPE {
     path msfiles
     val merge_ms
     val delay_flag
+    val vis_flag
+    val gpr
     val ml_gpr
 
     output:
@@ -149,9 +151,11 @@ process RunPSPIPE {
         echo "Merging Ms files"
         if !{delay_flag}; then
             echo "Using delay flagger"
-            pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging.log 2>&1
+            pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_delay_flagger.log 2>&1
+        elif ${vis_flag}; then
+            pspipe merge_ms,vis_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_vis_flagger.log 2>&1
         else
-            pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging.log 2>&1
+            pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_aoflagger_only.log 2>&1
         fi
 
         obs="!{obsid}_flagged"
@@ -160,11 +164,13 @@ process RunPSPIPE {
     pspipe image,gen_vis_cube !{toml_file} ${obs} > !{launchDir}/logs/ps_image_gen_vis_cube.log 2>&1
 
     if !{ml_gpr}; then
-        echo "running ML_GPR"
+        echo "Running foreground subtraction with ML_GPR"
         pspipe run_ml_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_ml_gpr.log 2>&1
-    else
-        echo "running GPR"
+    elif !{gpr}; then
+        echo "Running foreground subtraction with GPR"
         pspipe run_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_gpr.log 2>&1
+    else
+        echo "GPR foreground subtraction NOT applied"
     fi
 
     # python3 !{projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid ${obs} --outdir !{ps_dir} > !{launchDir}/logs/plot_ps.log 2>&1
