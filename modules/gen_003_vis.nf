@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-params.path = null // "/data/users/lofareor/chege/leap_tests/L254871/" //null
+params.path = null
 params.ms_files="ms_files_002.txt"
 
 process gen003Vis {
