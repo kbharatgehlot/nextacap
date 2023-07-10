@@ -63,7 +63,9 @@ process runSagecalStandalonePredict {
     debug true
     errorStrategy 'retry'
     maxRetries 2
-    label 'parallel_jobs'
+    cpus 12
+    memory '100 GB'
+    // label 'parallel_jobs'
     // publishDir "${params.outdir}/logs", pattern: "*predict.log", mode: "move", overwrite: true
 
     input:
