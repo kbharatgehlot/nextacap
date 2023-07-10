@@ -152,7 +152,7 @@ process RunPSPIPE {
         if !{delay_flag}; then
             echo "Using delay flagger"
             pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_delay_flagger.log 2>&1
-        elif ${vis_flag}; then
+        elif !{vis_flag}; then
             pspipe merge_ms,vis_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_vis_flagger.log 2>&1
         else
             pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_aoflagger_only.log 2>&1
