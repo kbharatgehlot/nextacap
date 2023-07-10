@@ -4,3 +4,4 @@ report.*
 timeline.*
 *.pyc
 test/*
+*download_staged_data.nf
