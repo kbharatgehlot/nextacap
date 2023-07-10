@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-A script do download data from the LTA using the `html.txt` provided after the data staging process
+A script do download data from the LTA by using `wget` on the `html.txt` provided after the data staging process as described here: `https://www.astron.nl/lofarwiki/doku.php?id=public:lta_howto`
+See `https://www.astron.nl/lofarwiki/doku.php?id=public:lta_tricks` for information on staging LOFAR data
 
 .. note::
-
+    You need a .wgetrc file in your home directory with your LTA username and password.
     The downloaded data is distributed across the given nodes, with the last node getting any remainder. Adjust `-nfiles_per_node` accordingly and of course make sure there is enough disk space on all the nodes used.
-
 How to use this module
 
 .. code-block:: python
@@ -13,7 +13,6 @@ How to use this module
     python3 /home/users/chege/theleap/leap/templates/download_staged_data.py --nodes_list ${nodeslist} --html_links_list ${htmltxt} --data_path ${datapath} --nfiles_per_node ${nfiles_per_node} --label ${label}
 
 """
-
 
 import os
 import asyncio
