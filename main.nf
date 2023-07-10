@@ -97,13 +97,13 @@ workflow {
     SET_NODES(VET_PARAMS.out)
     
     // flag and average to 002
-    // FLAG_GEN_002_VIS(SET_NODES.out[0], SET_NODES.out[1])
+    FLAG_GEN_002_VIS(SET_NODES.out[0], SET_NODES.out[1])
 
     //write out a txt file with all 002 MS files (A single one located in the master node data path)
     allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
 
     // run mpi DI
-    SAGECAL_MPI_DI(SET_NODES.out[0])
+    SAGECAL_MPI_DI(FLAG_GEN_002_VIS.out)
 
     //run bandpass
     SAGECAL_BANDPASS(SAGECAL_MPI_DI.out)
@@ -184,7 +184,7 @@ workflow FLAG_GEN_002_VIS  {
         pssh_hosts_txt
 
     main:
-        FlagAndAverageVisTo002(all_nodes_standby, pssh_hosts_txt, params.gen_002_vis.nf_module, params.data.path, params.data.ms_files_001)
+        FlagAndAverageVisTo002(all_nodes_standby, params.cluster.pssh_hosts_txt_file, params.gen_002_vis.nf_module, params.data.path, "${params.data.path}/ms_files_001.txt")
     
     emit:
         FlagAndAverageVisTo002.out
@@ -671,7 +671,7 @@ process FlagAndAverageVisTo002 {
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_002_file} --ms_files ${ms_files} > ${params.logs_dir}/flag_average_to_002.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_002_file} --path ${datapath} > ${params.logs_dir}/flag_average_to_002.log 2>&1
     """
 }
 
