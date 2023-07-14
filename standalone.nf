@@ -45,6 +45,7 @@ process runSagecalStandalone {
     """
     cp ${modes} \$PWD
     ${standalone_sagecal_command} > "${ms.Name}_bandpass.log"  2>&1
+    rm *.modes
     """
 }
 
