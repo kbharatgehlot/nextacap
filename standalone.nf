@@ -22,7 +22,7 @@ process runSagecalStandalone {
     debug true
     // cpus params.number_of_threads
     // errorStrategy { task.exitStatus == 139 ? 'retry' : 'terminate' } //134 is core dumping error
-
+    time '2h'
     errorStrategy 'retry'
     maxRetries 4
     

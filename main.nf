@@ -450,7 +450,7 @@ workflow GEN_003_VIS  {
         sagecal_bandpass_done
 
     main:
-        AverageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, "${params.data.path}/ms_files_002.txt")
+        AverageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, params.gen_003_vis.msin.datacolumn, "${params.data.path}/ms_files_002.txt")
 
     emit:
         AverageVisTo003.out
@@ -918,6 +918,7 @@ process AverageVisTo003 {
     val pssh_hosts_txt_file
     val dp3_average_to_003_file
     val datapath
+    val data_column
     val ms_files
 
     output:
@@ -926,7 +927,7 @@ process AverageVisTo003 {
     script:
     //--ms_files ${ms_files}
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_003_file} --path ${datapath} > ${params.logs_dir}/average_to_003.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_003_file} --path ${datapath} --data_column ${data_column} > ${params.logs_dir}/average_to_003.log 2>&1
     """
 }
 
