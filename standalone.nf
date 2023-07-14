@@ -4,10 +4,11 @@ params.datapath="${launchDir}"
 params.outdir = "${launchDir}"
 params.ms_files= null
 params.solsdir="${launchDir}"
-
+params.time_limit=null
+params.command = null
 // params.number_of_threads = 4
 
-params.command = null
+
 
 workflow {
     // Check that we have the 'params.ms_files' list and load it into a channel
@@ -22,7 +23,7 @@ process runSagecalStandalone {
     debug true
     // cpus params.number_of_threads
     // errorStrategy { task.exitStatus == 139 ? 'retry' : 'terminate' } //134 is core dumping error
-    time '2h'
+    time "${time_limit}"
     errorStrategy 'retry'
     maxRetries 4
     
@@ -34,6 +35,7 @@ process runSagecalStandalone {
     path ms
     val modes
     val solsdir
+    val time_limit
 
     output:
 

@@ -429,7 +429,7 @@ workflow SAGECAL_BANDPASS {
     main:
         add_cols_ch = AddColumnToMeasurementSet(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.output_column)
 
-        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir)
+        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir, params.bandpass.time_limit)
 
         wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
 
@@ -976,13 +976,14 @@ process SagecalStandalone {
     val standalone_sage_nf_file
     val ms_files
     val solsdir
+    val time_limit
 
     output:
     val true, emit: sagecal_complete
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --time_limit ${time_limit} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
 
