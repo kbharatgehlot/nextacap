@@ -6,6 +6,7 @@ params.ms_files= null
 params.solsdir="${launchDir}"
 params.time_limit=null
 params.command = null
+params.memory = "100 GB"
 // params.number_of_threads = 4
 
 
@@ -58,8 +59,10 @@ workflow Predict {
     def msetsList = new File(params.ms_files).collect {it}
     msets_channel = Channel.fromList(msetsList)
 
-    predict_channel = runSagecalStandalonePredict(msets_channel, params.shapelets.modes).collect()
+    predict_channel = runSagecalStandalonePredict(msets_channel, params.shapelets.modes, params.solsdir).collect()
 }
+
+
 
 
 process runSagecalStandalonePredict {
@@ -67,22 +70,32 @@ process runSagecalStandalonePredict {
     errorStrategy 'retry'
     maxRetries 2
     cpus 12
-    memory '100 GB'
+    memory "${params.memory}"
     // label 'parallel_jobs'
-    // publishDir "${params.outdir}/logs", pattern: "*predict.log", mode: "move", overwrite: true
+    publishDir "${params.outdir}/predict_logs", pattern: "*predict.log", mode: "move", overwrite: true
 
     input:
     path ms
     val modes
+    val solsdir //if this is given, the predict will asume we already have the sagecal solutions files and we want to apply them to the predicted dat aand subtract them from the imput data column. Also, add -z to your command if you want to ignore some clusters
 
     output:
     path "*predict.log" // tuple  val(true)
 
     script:
-    standalone_sagecal_command = make_standalone_sagecal_command() + " -d ${ms}"
+    if (solsdir) {
+        standalone_sagecal_command = make_standalone_sagecal_command() + " -p ${solsdir}/${ms.Name}.solutions -d ${ms}"
+    }
 
-    // cp ${modes} \$PWD
+    else {
+        standalone_sagecal_command = make_standalone_sagecal_command() + " -d ${ms}"
+    }
+
+    
+
+
     """
+    cp ${modes} \$PWD
     ${standalone_sagecal_command} > "${ms.Name}_predict.log"  2>&1
     """
 }
