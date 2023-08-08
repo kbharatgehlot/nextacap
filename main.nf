@@ -466,7 +466,7 @@ workflow SAGECAL_MPI_DD {
         cp_ch = GetModels(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
         dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
-        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
+        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
         ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
         SagecalMPI.out
@@ -491,8 +491,8 @@ workflow ANALYSE_GAINS {
             PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
         }
         else if (gains_type=="mpi_dd") {
-                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.data.path)
-                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
+                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.data.path)
+                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
             }
 
         else if (gains_type=="bandpass") {
