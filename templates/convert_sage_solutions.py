@@ -120,6 +120,10 @@ def main(argv):
         myl = glob.glob(fnames)
         myl = [i for i in myl if not "filtered" in i]
 
+        assert (
+            len(myl) > 0
+        ), f"No solutions files found on node {inode} at {args.indir}. \n Looked for {fnames}"
+
         for fname in myl:
             print(inode, fname)
             try:
