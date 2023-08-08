@@ -14,6 +14,7 @@ run_on_file_host_pattern = ""
 apply_aoflagger = true
 data_col = "CORRECTED_DATA"
 obs_id_out_suffix = "flagged"
+aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
 blmin = 0
 blmax = 1000
 flag_baselines = ""
