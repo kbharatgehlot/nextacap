@@ -1455,6 +1455,8 @@ def SagecalMPIDDCommand(){
     //     return params.mpi_dd.sagecal_command
     // }
     // else {
+    logfile="${params.logs_dir}/sagecal_mpi_dd.log"
+
             String sage_mpi_dd_command =  """ \
 -s ${params.mpi_dd.sky_model} \
 -F ${params.mpi_dd.sky_model_format} \
@@ -1481,7 +1483,7 @@ def SagecalMPIDDCommand(){
 -p ${params.mpi_dd.solutions_file} \
 -f \"${params.mpi_dd.ms_pattern}\" \
 -E ${params.mpi_dd.use_gpu} \
--V > ${params.mpi_dd.logfile}  2>&1 
+-V > ${logfile}  2>&1 
 """.stripIndent()
 
     if (params.mpi_dd.constant_rho_value){
