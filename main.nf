@@ -1490,6 +1490,10 @@ def SagecalMPIDDCommand(){
         sage_mpi_dd_command = sage_mpi_dd_command.replace("-G ${params.mpi_dd.admm_rho_file}", "-r ${params.mpi_dd.constant_rho_value}")
     }
 
+    if (params.mpi_dd.ntimeslots_to_calibrate){
+        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-T ${params.mpi_dd.ntimeslots_to_calibrate} -V > ${logfile}")
+    }
+
     if (params.mpi_dd.enable_spatial_reg){
         sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${params.mpi_dd.logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.alpha} -V > ${params.mpi_dd.logfile}")
     }
