@@ -148,7 +148,7 @@ process RunPSPIPE {
     // pspipe run_ml_gpr !{toml_file} !{obsid}_flagged
     // '''
     '''
-    # psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
+    psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
     obs="!{obsid}"
 
     mkdir -p !{launchDir}/logs
