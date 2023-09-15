@@ -65,11 +65,6 @@ process copy_from_nodeA2B {
     """
 
 }
-include { PsshNodesList  } from './main.nf'
-
-params.pssh_hosts_txt_file="${launchDir}/psshhosts.txt"
-params.htmltxt = null //needed when downloading staged data
-
 
 //================== Closures ============================================
 //without appending `node` prefix

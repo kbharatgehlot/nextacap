@@ -2,12 +2,15 @@
 
 params.path = null
 params.ms_files="ms_files_002.txt"
+params.data_column=null
 
 process gen003Vis {
     publishDir "${params.path}", mode: 'move'
 
     input:
     path ms002
+    val data_column
+
 
     output:
     tuple path('*_SAP*_SB*_uv_003*.MS'), val(true)
@@ -21,7 +24,7 @@ process gen003Vis {
     msout = ${ms003}
     msin.startchan = 0
     msin.nchan = 3
-    msin.datacolumn = CORRECTED_DATA
+    msin.datacolumn = "!{data_column}"
     msout.datacolumn = DATA
     steps = [avg1]
     avg1.type = average
@@ -38,5 +41,5 @@ workflow {
     _ = file(params.ms_files, glob: false, checkIfExists: true) //check it exists
     def msetsList = new File(params.ms_files).collect {it}
     msets_ch = Channel.fromList(msetsList)
-    gen3vis_ch = gen003Vis(msets_ch).collect()
+    gen3vis_ch = gen003Vis(msets_ch, params.data_column).collect()
 }

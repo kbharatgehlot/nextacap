@@ -1,6 +1,13 @@
 #!/usr/bin/env nextflow
-import groovy.json.JsonOutput
 
+// Show help message and exit
+if (params.help) {
+    helpMessage()
+    exit 0
+}
+
+import groovy.json.JsonOutput
+//import workflows
 include {
     MakeEffectiveClustersNumberFile;
     ConvertSagecalSolutions;
@@ -16,79 +23,154 @@ include {
     PlotPowerSpectrum;
 } from './modules/power_spectra.nf'
 
-
 //The tasks to be run are declared using the '-profile' command line option as a comma-separated string
-//we split this string here into a list
-params.tasks = "${workflow.profile}".split(",")
+//we split this string into a list.
+ //"${workflow.profile}".split(",")
+PRODUCTION_PIPELINE="standard,gen002vis,mpi_di,bandpass,gen003vis,mpi_dd,gains,ps,wsclean"
+PRODUCTION_PIPELINE_FROM_FIRST_DI="standard,mpi_di,bandpass,gen003vis,mpi_dd,gains,ps,wsclean" //No gen002vis
+PRODUCTION_PIPELINE_FROM_BANDPASS="standard,bandpass,gen003vis,mpi_dd,gains,ps,wsclean"
+PRODUCTION_PIPELINE_FROM_POST_DI_AVERAGING="standard,gen003vis,mpi_dd,gains,ps,wsclean"
+PRODUCTION_PIPELINE_FROM_DD="standard,mpi_dd,gains,ps,wsclean"
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Help message
+                                        // INITIALIZATION Workflow //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def helpMessage() {
-log.info """
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+workflow Initialise {
+    VET_PARAMS()
+    SET_NODES(VET_PARAMS.out)
+}
 
-DISCLAIMER! 
-    The workflow configuration in the current version runs the end to end LOFAR production pipeline. It includes ALL analysis tasks (plus some diagnostics steps) in the following sequence:
-        1: mpi_di
-        2: bandpass
-        3: gen003vis
-        4: mpi_dd
-        5: gains
-        6: ps
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                        //  MAIN WORKFLOW SELECTOR //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+workflow {
 
-    While there are plans to enable a different number/order of tasks as required by the user, this functionality is yet automated.
-    However, A user familiar with Nextflow syntax can easily modify the main workflow to their specific requirements.
-    For sugestions/questions talk to the author of NextLEAP
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+    if ("${workflow.profile}"=="standard") {
+        defaultLOFAREoRPipelineMessage()
+        params.tasks = PRODUCTION_PIPELINE.split(",")
+        Production()
+    }
+    else {
+        requested_tasks_set = "${workflow.profile}".split(",") as Set
+        pipeline_set =  PRODUCTION_PIPELINE.split(",") as Set
+        pipeline_from_first_di_set =  PRODUCTION_PIPELINE_FROM_FIRST_DI.split(",") as Set
+        pipeline_from_bandpass_set =  PRODUCTION_PIPELINE_FROM_BANDPASS.split(",") as Set
+        pipeline_from_post_di_averaging_set =  PRODUCTION_PIPELINE_FROM_POST_DI_AVERAGING.split(",") as Set
+        pipeline_from_dd_set =  PRODUCTION_PIPELINE_FROM_DD.split(",") as Set
 
+        if (requested_tasks_set == pipeline_set) {
+            defaultLOFAREoRPipelineMessage()
+            params.tasks = PRODUCTION_PIPELINE.split(",")
+            if (params.init) {
+                Initialise()
+            }
+            else{
+                Production()
+            }
+        }
+        else if (requested_tasks_set == pipeline_from_first_di_set) {
+            defaultLOFArEoRPipelineFrom002Message()
+            params.tasks = PRODUCTION_PIPELINE_FROM_FIRST_DI.split(",")
+            if (params.init) {
+                Initialise()
+            }
+            else {
+                ProductionPipelineFromFirstDI()
+            }
+        }
+        else if (requested_tasks_set == pipeline_from_bandpass_set) {
+            defaultLOFArEoRPipelineFromBandpassMessage()
+            params.tasks = PRODUCTION_PIPELINE_FROM_BANDPASS.split(",")
+            if (params.init) {
+                Initialise()
+            }
+            else {
+                ProductionPipelineFromBandpass()
+            }
+        }
+        else if (requested_tasks_set == pipeline_from_post_di_averaging_set) {
+            defaultLOFArEoRPipelineFromPostDIAveraging()
+            params.tasks = PRODUCTION_PIPELINE_FROM_POST_DI_AVERAGING.split(",")
+            if (params.init) {
+                Initialise()
+            }
+            else {
+                ProductionPipelineFromPostDIAveraging()
+            }
+        }
+        else if (requested_tasks_set == pipeline_from_dd_set) {
+            defaultLOFArEoRPipelineFromDDMessage()
+            params.tasks = PRODUCTION_PIPELINE_FROM_DD.split(",")
+            if (params.init) {
+                Initialise()
+            }
+            else {
+                ProductionPipelineFromDD()
+            }
+        }
+        else {
+            unsupportedTasksCombinationError()
+            exit 0
+        }
+    }
+}
 
-TYPICAL USAGE COMMAND:
-    This pipeline runs in 2 commands:
-
-    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-    |nextflow run main2.nf -profile standard,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps --data.obsid L254871 --data.path /path/to/MS/files/ --data.label R --cluster.nodes 125,126,127,128,129,130,131 -entry init   |
-    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-    |nextflow run main2.nf -profile standard,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps -params-file params.json                                                                                                     |
-    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-
-    Command 1:  Initiates the minimum required inputs.
-
-            A json configuration file named `params.json` is output with more variables.
-            These variables are set to the default settings in the LOFAR EoR production pipeline.
-            Take some time to confirm/change the config settings in the file.
-
-    Command 2:  Runs the pipeline
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-
-MANDATORY ARGUMENTS:
-    --obsid                         Observation ID. e.g L254874
-    --data.path                     The path where data is stored. Should be valid for all the nodeswhere data is distributed.
-    --cluster.nodes                 Node numbers where data is distributed as a comma separated string. e.g. "125,126,127,128,129" or a single number if using a single node. The last node in the list is the masternode.
-    --cluster.slots                         Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on DAWN.
-    -profile                        The configuration profile lists the tasks to be run and where to run them.                                               
-    --label                         An extra data string label, like "R" or '2022' previously used for LOFAR NCP data to refer to a specific processing season.
-
-
-OPTIONAL ARGUMENTS:
-    --help                          Display this usage statement, and exit.
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                        //  RUNNING WORKFLOW INFORMATION    //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+def unsupportedTasksCombinationError() {
+    log.error """
+Error: The requested tasks combination is currrently unsupported (`${workflow.profile}`)
+Error: Supported task combinations include:\n
+    --> ${PRODUCTION_PIPELINE} (full production pipeline, default)\n 
+    --> ${PRODUCTION_PIPELINE_FROM_FIRST_DI} (production pipeline from the first DI step)\n
+    --> ${PRODUCTION_PIPELINE_FROM_BANDPASS} (production pipeline from the second DI step)\n
+    --> ${PRODUCTION_PIPELINE_FROM_DD} (production pipeline from the second DI step)\n
 """
 }
 
 
-// Show help message and exit
-if (params.help) {
-    helpMessage()
-    exit 0
+def defaultLOFAREoRPipelineMessage() {
+    log.info """
+[nextleap]: Running default LOFAR EoR KSP production pipeline:
+[nextleap]: ${PRODUCTION_PIPELINE}
+"""
+}
+
+def defaultLOFArEoRPipelineFrom002Message() {
+    log.info """
+[nextleap]: Running default LOFAR EoR KSP production pipeline from the the first Direction Independent calibration step (fast time-varying effects with spectral regularisation):
+[nextleap]: ${PRODUCTION_PIPELINE_FROM_FIRST_DI}
+"""
+}
+
+def defaultLOFArEoRPipelineFromBandpassMessage() {
+    log.info """
+[nextleap]: Running default LOFAR EoR KSP production pipeline from the second Direction Independent calibration step (bandpass without spectral regularisation):
+[nextleap]: ${PRODUCTION_PIPELINE_FROM_FIRST_DI}
+"""
+}
+
+def defaultLOFArEoRPipelineFromPostDIAveraging() {
+    log.info """
+[nextleap]: Running default LOFAR EoR KSP production pipeline from an averaging step towards Direction Dependent Calibration:
+[nextleap]: ${PRODUCTION_PIPELINE_FROM_POST_DI_AVERAGING}
+"""
+}
+
+def defaultLOFArEoRPipelineFromDDMessage() {
+    log.info """
+[nextleap]: Running default LOFAR EoR KSP production pipeline from the Direction Dependent calibration step:
+[nextleap]: ${PRODUCTION_PIPELINE_FROM_DD}
+"""
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Workflows
+                                        // PRODUCTION Workflow //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-workflow {
+
+workflow Production {
     //Check that all params are valid
     //save them in a json file for modification if needed and for posterity
     VET_PARAMS()
@@ -125,20 +207,147 @@ workflow {
 
 }
 
-
-workflow init {
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                // PRODUCTION Workflow starting from the first DI step //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+workflow ProductionPipelineFromFirstDI {
+    //Check that all params are valid
+    //save them in a json file for modification if needed and for posterity
     VET_PARAMS()
+
+    //Generate mpirun and pssh hosts files
     SET_NODES(VET_PARAMS.out)
+
+    //write out a txt file with all 002 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
+
+    // run mpi DI
+    SAGECAL_MPI_DI(SET_NODES.out[0])
+
+    //run bandpass
+    SAGECAL_BANDPASS(SAGECAL_MPI_DI.out)
+
+    // average to 003
+    GEN_003_VIS(SAGECAL_BANDPASS.out)
+
+    //write out a txt file with all 003 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
+
+    //Run sagecal mpi DD
+    SAGECAL_MPI_DD(GEN_003_VIS.out)
+
+    //Plot sagecal DD gains
+    ANALYSE_GAINS(SAGECAL_MPI_DD.out, "mpi_dd")
+
+    //run pspipe
+    POWER_SPECTRUM(SAGECAL_MPI_DD.out)
+
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                // PRODUCTION Workflow starting from the second DI step //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+workflow ProductionPipelineFromBandpass {
+    //Check that all params are valid
+    //save them in a json file for modification if needed and for posterity
+    VET_PARAMS()
+
+    //Generate mpirun and pssh hosts files
+    SET_NODES(VET_PARAMS.out)
+
+    //write out a txt file with all 002 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
+
+
+    //run bandpass
+    SAGECAL_BANDPASS(SET_NODES.out[0])
+
+    // average to 003
+    GEN_003_VIS(SAGECAL_BANDPASS.out)
+
+    //write out a txt file with all 003 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
+
+    //Run sagecal mpi DD
+    SAGECAL_MPI_DD(GEN_003_VIS.out)
+
+    //Plot sagecal DD gains
+    ANALYSE_GAINS(SAGECAL_MPI_DD.out, "mpi_dd")
+
+    //run pspipe
+    POWER_SPECTRUM(SAGECAL_MPI_DD.out)
+
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                        // PRODUCTION Workflow starting from the averaging step after DI calibration //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+workflow ProductionPipelineFromPostDIAveraging {
+    //Check that all params are valid
+    //save them in a json file for modification if needed and for posterity
+    VET_PARAMS()
+
+    //Generate mpirun and pssh hosts files
+    SET_NODES(VET_PARAMS.out)
+
+    //write out a txt file with all 002 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
+
+    // average to 003
+    GEN_003_VIS(SET_NODES.out[0])
+
+    //write out a txt file with all 003 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
+
+    //Run sagecal mpi DD
+    SAGECAL_MPI_DD(GEN_003_VIS.out)
+
+    //Plot sagecal DD gains
+    ANALYSE_GAINS(SAGECAL_MPI_DD.out, "mpi_dd")
+
+    //run pspipe
+    POWER_SPECTRUM(SAGECAL_MPI_DD.out)
+
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                        // PRODUCTION Workflow starting from DD calibration //
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+workflow ProductionPipelineFromDD {
+    //Check that all params are valid
+    //save them in a json file for modification if needed and for posterity
+    VET_PARAMS()
+
+    //Generate mpirun and pssh hosts files
+    SET_NODES(VET_PARAMS.out)
+
+    //write out a txt file with all 002 MS files (A single one located in the master node data path)
+    // allMsetsPerStageNumber("002", params.data.sub_bands_per_node)
+
+    //write out a txt file with all 003 MS files (A single one located in the master node data path)
+    allMsetsPerStageNumber("003", params.data.sub_bands_per_node)
+
+    //Run sagecal mpi DD
+    SAGECAL_MPI_DD(SET_NODES.out[0])
+
+    //Plot sagecal DD gains
+    ANALYSE_GAINS(SAGECAL_MPI_DD.out, "mpi_dd")
+
+    //run pspipe
+    POWER_SPECTRUM(SAGECAL_MPI_DD.out)
+
+}
 
 workflow VET_PARAMS {
     main:
+        log.info """[nextleap]: initialising params"""
+        params_valid = checkParams() //CheckingParams()
+
+        log.info """[nextleap]: verifying nodes list"""
         nodes_list  = parseNodes()
-        params_check_ch = CheckingParams()
 
+        log.info """[nextleap]: verifying data distribution"""
         checkInitialDataDistribution(nodes_list)
-
         writeMSListPerNodeStageNumber()
 
         //we can now generate the sagecal command for each mode
@@ -146,7 +355,7 @@ workflow VET_PARAMS {
         
 
         //All params are available now
-        SavingParams(params_check_ch.all_params_valid)
+        SavingParams(params_valid)
 
         //only show params info after validating all params //TODO:
         // if (params.verbose){
@@ -168,7 +377,7 @@ workflow SET_NODES {
             mpirun_ch = MpiRunNodesList(params_json_written, nodes_list, params.cluster.slots, params.cluster.mpirun_hosts_txt_file)
             PsshNodesList(mpirun_ch.mpi_standby, nodes_list, params.cluster.pssh_hosts_txt_file)
         }
-        else if (params.tasks.contains("bandpass")) {
+        else { //if (params.tasks.contains("bandpass"))
             PsshNodesList(params_json_written, nodes_list, params.cluster.pssh_hosts_txt_file)
         }
 
@@ -190,7 +399,6 @@ workflow FLAG_GEN_002_VIS  {
         FlagAndAverageVisTo002.out
 
 }
-
 
 workflow SAGECAL_MPI_DI {
     take:
@@ -221,7 +429,7 @@ workflow SAGECAL_BANDPASS {
     main:
         add_cols_ch = AddColumnToMeasurementSet(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.output_column)
 
-        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir)
+        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir, params.bandpass.time_limit)
 
         wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
 
@@ -242,7 +450,7 @@ workflow GEN_003_VIS  {
         sagecal_bandpass_done
 
     main:
-        AverageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, "${params.data.path}/ms_files_002.txt")
+        AverageVisTo003(sagecal_bandpass_done, params.cluster.pssh_hosts_txt_file, params.gen_003_vis.nf_module, params.data.path, params.gen_003_vis.msin.datacolumn, "${params.data.path}/ms_files_002.txt")
 
     emit:
         AverageVisTo003.out
@@ -258,7 +466,7 @@ workflow SAGECAL_MPI_DD {
         cp_ch = GetModels(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
         dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
-        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_dd.solsdir, params.mpi_dd.ms_pattern)
+        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
         ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
         SagecalMPI.out
@@ -283,8 +491,8 @@ workflow ANALYSE_GAINS {
             PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
         }
         else if (gains_type=="mpi_dd") {
-                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.data.path)
-                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_dd.solsdir, params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
+                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.data.path)
+                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
             }
 
         else if (gains_type=="bandpass") {
@@ -300,24 +508,22 @@ workflow POWER_SPECTRUM {
     main:
         // init_ch = InitPSDB(sagecal_complete, params.data.path)
         ps_dir = "${params.data.path}/${params.pspipe.dir}"
-        rev_ch = AddRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, ps_dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms) // TODO: stop using only the final node 
+        rev_ch = AddRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, ps_dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms, params.pspipe.aoflag_after_merge_ms) // TODO: stop using only the final node 
         ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flagger, params.pspipe.vis_flagger, params.pspipe.gpr, params.pspipe.ml_gpr)
         // PlotPowerSpectrum(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
 }
 
-
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Processes
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-process CheckingParams {
+// process CheckingParams {
 
-    output:
-    val true, emit: all_params_valid
+//     output:
+//     val true, emit: all_params_valid
 
-    exec:
-    checkParams()
-}
+//     exec:
+//     checkParams()
+// }
 
 
 process SavingParams {
@@ -332,8 +538,10 @@ process SavingParams {
         val true, emit: params_json_written
 
     script:
+    def edited_params =params
+    edited_params.remove("init")
     """
-        echo '${JsonOutput.prettyPrint(JsonOutput.toJson(params))}' > params.json
+        echo '${JsonOutput.prettyPrint(JsonOutput.toJson(edited_params))}' > params.json
     """
 }
 
@@ -458,7 +666,7 @@ process GetModels {
     if (sim)
 
     """
-    echo "[Info] We assume the simulation does not need the NCP shapelets model. Shout if otherwise!"
+    echo "[nextleap]: We assume the simulation does not need the NCP shapelets model. Shout if otherwise!"
     """
 
     else
@@ -515,7 +723,7 @@ process ApplyPreDIFlag {
     if (sim)
 
     """
-    echo "[Info] We assume the simulation does not need any visibilties flagging before DI calibration."
+    echo "[nextleap]: We assume the simulation does not need any visibilities flagging before DI calibration."
     """
 
     else
@@ -619,7 +827,7 @@ process ApplyPreDDFlag {
     if (sim)
 
     """
-    echo "[Info] We assume the simulation does not need any visibilties flagging before DD calibration."
+    echo "[nextleap]: We assume the simulation does not need any visibilities flagging before DD calibration."
     """
 
     else
@@ -710,6 +918,7 @@ process AverageVisTo003 {
     val pssh_hosts_txt_file
     val dp3_average_to_003_file
     val datapath
+    val data_column
     val ms_files
 
     output:
@@ -718,7 +927,7 @@ process AverageVisTo003 {
     script:
     //--ms_files ${ms_files}
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_003_file} --path ${datapath} > ${params.logs_dir}/average_to_003.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${dp3_average_to_003_file} --path ${datapath} --data_column ${data_column} > ${params.logs_dir}/average_to_003.log 2>&1
     """
 }
 
@@ -767,13 +976,14 @@ process SagecalStandalone {
     val standalone_sage_nf_file
     val ms_files
     val solsdir
+    val time_limit
 
     output:
     val true, emit: sagecal_complete
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --time_limit ${time_limit} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
     """
 }
 
@@ -900,18 +1110,22 @@ process ImageWithWSClean {
     """
 }
 
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Closures
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 def checkParams() {
     //check obsid and nodes
+    assert params.data.obsid : log.error("Error:'Observation ID is required")
+    assert params.data.label : log.error("Error:'Observation ID label is required")
     assert params.data.path : log.error("Error:'--data.path' needed")
     assert params.cluster.nodes : log.error("Error: Please provide a comma separated string of nodes. Try --cluster.nodes '100,101,102,103,104'")
 
-    if (params.tasks.contains("ps")){
-        dir = file("${params.data.path}/${params.pspipe.dir}", type: 'dir', checkIfExists: false) //I don't know how to make it fail if it already exists.
-        dir.exists() ? log.info("[Info] ${params.data.path}/${params.pspipe.dir} ps dir already exists. will be overwritten!") : log.info("[Info] pspipe dir ${params.pspipe.dir} ")
-    }
+    // if (params.tasks.contains("ps")){
+    //     dir = file("${params.data.path}/${params.pspipe.dir}", type: 'dir', checkIfExists: false) //I don't know how to make it fail if it already exists.
+    //     dir.exists() ? log.info("[nextleap]: ${params.data.path}/${params.pspipe.dir} ps dir already exists. will be overwritten!") : log.info("[nextleap]: pspipe dir ${params.pspipe.dir} ")
+    // }
+    return true
 }
 
 
@@ -925,6 +1139,10 @@ def parseNodes(){
     //when a single node is given..
     else if (params.cluster.nodes instanceof Integer) {
         nodes_list = params.cluster.nodes.collect{"node${it}"} as List
+    }
+    else {
+        log.error("Error: The `cluster.nodes` parameter is not valid. Got `--params.cluster.nodes=${params.cluster.nodes}`")
+        exit 0
     }
     //Define 2 more required params
     params.cluster.masternode = nodes_list[-1] //The last node in the list is used as the masternode
@@ -1018,7 +1236,7 @@ def getInitialStageNumber() {
     requested_tasks = getRequiredtasksStageNumbers()
     initial_stage_number = requested_tasks.min { it.value }.value
     initial_stage_number = String.format("%03d", initial_stage_number)
-    log.info("[Info] initial stage number: ${initial_stage_number}")
+    log.info("[nextleap]: initial stage number: ${initial_stage_number}")
     return initial_stage_number 
 }
 
@@ -1087,7 +1305,7 @@ write a single file listing all msets from all nodes
 def checkInitialDataDistribution(nodes_list) {
     initial_stage_number = getInitialStageNumber()
     initial_ms_pattern = lofarDefaultMsnamePattern(initial_stage_number)
-    log.info("[Info] initial ms pattern: ${initial_ms_pattern}")
+    log.info("[nextleap]: initial ms pattern: ${initial_ms_pattern}")
 
     params.data.sub_bands_per_node = [:]
 
@@ -1145,7 +1363,7 @@ def generateSagecalCommand() {
 
 def SagecalBandpassCommand() {
     // if (params.bandpass.sagecal_command) {
-    //     log.info("[Info] using user provided sagecal bandpass command")
+    //     log.info("[nextleap]: using user provided sagecal bandpass command")
     //     return params.bandpass.sagecal_command
     // }
     // else {
@@ -1183,7 +1401,7 @@ def SagecalBandpassCommand() {
 
 def SagecalMPIDICommand(){
     // if (params.mpi_di.sagecal_command) {
-    //     log.info("[Info] using user provided sagecal MPI DI command")
+    //     log.info("[nextleap]: using user provided sagecal MPI DI command")
     //     return params.mpi_di.sagecal_command
     // }
     // else{
@@ -1233,10 +1451,12 @@ def SagecalMPIDICommand(){
 
 def SagecalMPIDDCommand(){
     // if (params.mpi_dd.sagecal_command) {
-    //     log.info("[Info] using user provided sagecal MPI DD command")
+    //     log.info("[nextleap]: using user provided sagecal MPI DD command")
     //     return params.mpi_dd.sagecal_command
     // }
     // else {
+    logfile="${params.logs_dir}/sagecal_mpi_dd.log"
+
             String sage_mpi_dd_command =  """ \
 -s ${params.mpi_dd.sky_model} \
 -F ${params.mpi_dd.sky_model_format} \
@@ -1263,15 +1483,19 @@ def SagecalMPIDDCommand(){
 -p ${params.mpi_dd.solutions_file} \
 -f \"${params.mpi_dd.ms_pattern}\" \
 -E ${params.mpi_dd.use_gpu} \
--V > ${params.mpi_dd.logfile}  2>&1 
+-V > ${logfile}  2>&1 
 """.stripIndent()
 
     if (params.mpi_dd.constant_rho_value){
         sage_mpi_dd_command = sage_mpi_dd_command.replace("-G ${params.mpi_dd.admm_rho_file}", "-r ${params.mpi_dd.constant_rho_value}")
     }
 
+    if (params.mpi_dd.ntimeslots_to_calibrate){
+        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-T ${params.mpi_dd.ntimeslots_to_calibrate} -V > ${logfile}")
+    }
+
     if (params.mpi_dd.enable_spatial_reg){
-        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${params.mpi_dd.logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.alpha} -V > ${params.mpi_dd.logfile}")
+        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.alpha} -V > ${logfile}")
     }
 
         mpi_command = make_mpi_command()
@@ -1295,4 +1519,62 @@ def writeListToTxt (txt_file_name, list_of_strings) {
         txt_file.withWriter{ out ->
         list_of_strings.each {out.println it}
     }
+}
+
+
+def helpMessage() {
+log.info """
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+DESCRIPTION! 
+    The workflow configuration in the current version runs the end to end LOFAR production pipeline.
+    It includes ALL analysis tasks (plus some diagnostics steps) in the following sequence:
+        1: gen002vis
+        2: mpi_di
+        3: bandpass
+        4: wsclean*
+        5: gen003vis
+        6: mpi_dd
+        7: gains
+        8: wsclean*
+        9: ps
+    Different tasks combination can also be used.
+    However, the possibilities supported might not be exhaustive.
+    Let us know if your disired pcombination is not covered.
+    For sugestions/questions talk to the author of NextLEAP
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+
+TYPICAL USAGE COMMAND:
+    This pipeline runs in 2 commands:
+
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+    |nextflow run main.nf -profile standard,gen002vis,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps --data.obsid L254871 --data.path /path/to/MS/files/ --data.label R --cluster.nodes 126,127,128,129 -entry init      |
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+    |nextflow run main.nf -profile standard,gen002vis,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps -params-file logs/params.json                                                                                       |
+    |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+    Command 1:  Initiates the minimum required inputs.
+
+            A json configuration file named `params.json` is output with more variables.
+            These variables are set to the default settings in the LOFAR EoR production pipeline.
+            Take some time to confirm/change the config settings in the file.
+
+    Command 2:  Runs the pipeline
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+MANDATORY ARGUMENTS:
+    --obsid                         Observation ID. e.g L254874
+    --data.path                     The path where data is stored. Should be valid for all the nodeswhere data is distributed.
+    --cluster.nodes                 Node numbers where data is distributed as a comma separated string. e.g. "125,126,127,128,129" or a single number if using a single node. The last node in the list is the masternode.
+    --cluster.slots                         Number of slots per node for mpi run. For now, all given nodes are assigned the same slots number so maybe don't use nodes 119 and 124 on DAWN.
+    -profile                        The configuration profile lists the tasks to be run and where to run them.                                               
+    --label                         An extra data string label, like "R" or '2022' previously used for LOFAR NCP data to refer to a specific processing season.
+
+
+OPTIONAL ARGUMENTS:
+    --help                          Display this usage statement, and exit.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+"""
 }

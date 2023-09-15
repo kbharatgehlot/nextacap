@@ -15,7 +15,7 @@ params.ml_gpr = false
 
 workflow {
     // init_ch = InitPSDB(true, params.datapath)
-    rev_ch = AddRevision(true, params.obsid, params.data_column, params.datapath, params.pspipe_dir, params.nodes, params.max_concurrent, params.revision, params.merge_ms) //!check this
+    rev_ch = AddRevision(true, params.obsid, params.data_column, params.datapath, params.pspipe_dir, params.nodes, params.max_concurrent, params.revision, params.merge_ms, params.aoflag_after_merge_ms) //!check this
     ps_ch = RunPSPIPE(params.pspipe_dir, rev_ch.toml_file, params.obsid, params.msfiles, params.merge_ms, params.delay_flag, params.ml_gpr)
     // PlotPowerSpectrum(ps_ch.ready, params.pspipe_dir, rev_ch.toml_file, params.obsid)
 }
@@ -55,6 +55,7 @@ process AddRevision{
     val max_concurrent
     val revname
     val merge_ms
+    val aoflag_after_merge_ms
 
     output:
     val "${ps_dir}/${revname}.toml", emit: toml_file
@@ -77,6 +78,11 @@ cp "!{projectDir}/configs/pspipe_toml_templates/flagger_pre_combine.parset" .
 
 if !{merge_ms}; then
     image_data_col="DATA"
+    if !{aoflag_after_merge_ms};  then
+        aoflag=(true)
+    else
+        aoflag=(false)
+    fi
 else
     image_data_col="!{data_column}"
 fi
@@ -93,7 +99,7 @@ run_on_file_host_pattern = '\\/net/(node\\d{3})'
 env_file='/home/users/mertens/.activate_pspipe_dev.sh'
 [merge_ms]
 data_col = "!{data_column}"
-aoflagger_strategy = '/home/users/mertens/projects/NCP/nights_np5_red1/lofar-sens2.lua'
+apply_aoflagger = ${aoflag[@]}
 [image]
 data_col = "${image_data_col}"
 channels_out = 'every3'
@@ -152,7 +158,7 @@ process RunPSPIPE {
         if !{delay_flag}; then
             echo "Using delay flagger"
             pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_delay_flagger.log 2>&1
-        elif ${vis_flag}; then
+        elif !{vis_flag}; then
             pspipe merge_ms,vis_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_vis_flagger.log 2>&1
         else
             pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_aoflagger_only.log 2>&1
