@@ -1495,7 +1495,14 @@ def SagecalMPIDDCommand(){
     }
 
     if (params.mpi_dd.enable_spatial_reg){
-        sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.alpha} -V > ${logfile}")
+        if (params.mpi_dd.constant_alpha_value){
+            sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -u ${params.mpi_dd.spatial_reg.constant_alpha_value} -V > ${logfile}")
+        }
+
+        else {
+            sage_mpi_dd_command = sage_mpi_dd_command.replace("-V > ${logfile}", "-X ${params.mpi_dd.spatial_reg.lambda},${params.mpi_dd.spatial_reg.mu},${params.mpi_dd.spatial_reg.n0},${params.mpi_dd.spatial_reg.fista_maxiter},${params.mpi_dd.spatial_reg.candence} -V > ${logfile}")
+        }
+
     }
 
         mpi_command = make_mpi_command()
