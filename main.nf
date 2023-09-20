@@ -1105,7 +1105,7 @@ process ImageWithWSClean {
     List mslist = file(msfyl).readLines()
     String mses = mslist.collect {"${it}"}.join(" ")
     """
-    wsclean -data-column ${datacolumn} -gridder wgridder -wgridder-accuracy 1e-5 -reorder -make-psf -scale ${scale} -size ${size} ${size} -weight ${weight} -minuv-l ${minuv_lambda} -maxuv-l ${maxuv_lambda} -pol ${polarisation} -name ${name} -j ${threads} ${mses}  > ${params.logs_dir}/wsclean.log 2>&1
+    wsclean -interval 0 361 -data-column ${datacolumn} -gridder wgridder -wgridder-accuracy 1e-5 -reorder -make-psf -scale ${scale} -size ${size} ${size} -weight ${weight} -minuv-l ${minuv_lambda} -maxuv-l ${maxuv_lambda} -pol ${polarisation} -name ${name} -j ${threads} ${mses}  > ${params.logs_dir}/wsclean.log 2>&1
     python3 ${projectDir}/templates/read_fits_image.py -i ${name}-image.fits
     """
 }
