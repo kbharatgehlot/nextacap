@@ -17,7 +17,7 @@ workflow {
     def msetsList = new File(params.ms_files).collect {it}
     msets_ch = Channel.fromList(msetsList) // .buffer( size: 4, remainder: true )
 
-    sage_std_ch = runSagecalStandalone(msets_ch, params.shapelets.modes, params.solsdir).collect()
+    sage_std_ch = runSagecalStandalone(msets_ch, params.shapelets.modes, params.solsdir, params.time_limit).collect()
 }
 
 process runSagecalStandalone {
