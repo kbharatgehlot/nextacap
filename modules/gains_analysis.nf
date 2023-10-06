@@ -44,8 +44,8 @@ process ConvertSagecalSolutions {
     """
     #pssh -v -i -h ${pssh_hosts_txt_file} -t 0 "mkdir -p ${solsdir}; mv ${datapath}/${ms_pattern}.solutions ${solsdir}"
 
-    python3 ${projectDir}/templates/convert_sage_solutions.py -o ${obsid} -m ${datapath}/*.MS -p ${datapath}/${solsdir} -d \${PWD} -n ${allnodes} -c 0 2000 --eff_nr ${eff_nr_file} --pid ${stage_number} > ${logs}
-    mv *.npz *.npy ${datapath}/${solsdir}
+    python3 ${projectDir}/templates/convert_sage_solutions.py -o ${obsid} -m ${datapath}/*.MS -p ${solsdir} -d \${PWD} -n ${allnodes} -c 0 2000 --eff_nr ${eff_nr_file} --pid ${stage_number} > ${logs}
+    mv *.npz *.npy ${solsdir}
     """
 }
 
