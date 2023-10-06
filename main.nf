@@ -409,14 +409,14 @@ workflow SAGECAL_MPI_DI {
         cp_ch = GetModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.mpi_di.output_column)
         di_preprocess_ch = ApplyPreDIFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.sim)
-        sage_mpi_di_ch = SagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.mpi_di.ms_pattern)
+        sage_mpi_di_ch = SagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_di.solsdir}", params.mpi_di.ms_pattern)
 
         eff_ch = MakeEffectiveClustersNumberFile(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
 
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.mpi_di.solsdir, params.data.path, params.mpi_di.stage_number)
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path, params.mpi_di.stage_number)
 
-        ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
-        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
+        ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path)
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
     emit:
         PlotSagecalDISolutions.out
 }
@@ -429,15 +429,15 @@ workflow SAGECAL_BANDPASS {
     main:
         add_cols_ch = AddColumnToMeasurementSet(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.output_column)
 
-        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", params.bandpass.solsdir, params.bandpass.time_limit)
+        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", "${params.data.path}/${params.bandpass.solsdir}", params.bandpass.time_limit)
 
         wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
 
         eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file) //wsc_ch.wsclean_complete
 
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params.bandpass.solsdir, params.data.path, params.bandpass.stage_number)
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.bandpass.solsdir}", params.data.path, params.bandpass.stage_number)
 
-        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
 
 
     emit:
@@ -482,13 +482,13 @@ workflow ANALYSE_GAINS {
     main:
 
         eff_ch = MakeEffectiveClustersNumberFile(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file)
-
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, params."${gains_type}".solsdir, params.data.path, params."${gains_type}".stage_number)
+        solsdir = params."${gains_type}".solsdir
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${solsdir}", params.data.path, params."${gains_type}".stage_number)
 
 
         if (gains_type=="mpi_di") {
-            ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.data.path)
-            PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.mpi_di.solsdir, params.gains.fmin, params.gains.fmax)
+            ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path)
+            PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
         }
         else if (gains_type=="mpi_dd") {
                 ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.data.path)
@@ -496,7 +496,7 @@ workflow ANALYSE_GAINS {
             }
 
         else if (gains_type=="bandpass") {
-                PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, params.bandpass.solsdir, params.gains.fmin, params.gains.fmax)
+                PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
             }
 }
 
