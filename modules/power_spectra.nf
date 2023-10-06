@@ -84,6 +84,7 @@ if !{merge_ms}; then
         aoflag=(false)
     fi
 else
+    aoflag=(false)
     image_data_col="!{data_column}"
 fi
 
