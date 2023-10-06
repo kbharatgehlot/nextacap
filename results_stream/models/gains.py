@@ -5,22 +5,24 @@ from plotly.subplots import make_subplots
 
 
 class Gains:
-    def __init__(self, obsid, calibration="DD"):
+    def __init__(self, obsid: object, calibration="mpi_di"):
         self.obsid = obsid
 
-        if calibration == "DD":
-            self.solutions_file = obsid.direction_dependent_solutions_file
-            self.eff_file = obsid.direction_dependent_effective_clusters
-            self.clusters_file = obsid.direction_dependent_clusters_file
-        else:
-            if calibration == "DI":
-                self.solutions_file = obsid.direction_independent_solutions_file
+        if calibration == "mpi_di":
+            self.solutions_file = obsid.di_solutions_file
+            self.eff_file = obsid.di_effective_clusters
+            self.clusters_file = obsid.di_clusters_file
 
-            if calibration == "BP":
-                self.solutions_file = obsid.bandpass_solutions_file
+        if calibration == "bandpass":
+            self.solutions_file = obsid.bandpass_solutions_file
+            self.eff_file = obsid.bandpass_effective_clusters
+            self.clusters_file = obsid.bandpass_clusters_file
 
-            self.eff_file = obsid.direction_independent_effective_clusters
-            self.clusters_file = obsid.direction_independent_clusters_file
+        if calibration == "mpi_dd":
+            self.solutions_file = obsid.dd_solutions_file
+            self.eff_file = obsid.dd_effective_clusters
+            self.clusters_file = obsid.dd_clusters_file
+
 
         self.meta_data = np.load(
             self.solutions_file.replace(".npy", ".npz").replace("_zsol", "")

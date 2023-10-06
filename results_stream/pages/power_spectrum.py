@@ -15,7 +15,7 @@ def display_multiple_3D_power_spectra(all_processed_observations: list[str]):
         for nightID in all_processed_observations:
             with st.expander(f"{nightID}", expanded=True):
                 Obsid = ObsID(Processed.nights[nightID])
-                # st.write(Obsid.pspipe_pdfs)
+                st.write(Obsid.pspipe_pdfs)
                 pdf = [x for x in Obsid.pspipe_pdfs if str(x).endswith("ps3d.pdf")]
                 if pdf:
                     ps_im = convert_pdf_to_jpeg(pdf[0])
