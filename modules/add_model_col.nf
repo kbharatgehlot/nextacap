@@ -20,7 +20,7 @@ process addModelCol {
 
     script:
     """
-    python3 /home/users/chege/theleap/leap/modules/add_model_col.py -i ${ms} -d ${datacol} -c ${correctedcol} -m ${modelcol}
+    python3 /home/users/chege/theleap/leap/templates/add_model_col.py -i ${ms} -d ${datacol} -c ${correctedcol} -m ${modelcol}
     """
 }
 
