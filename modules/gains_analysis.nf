@@ -1,13 +1,14 @@
 #!/usr/bin/env nextflow
-
+params.output_dir = "${params.data.path}/results"
 
 process MakeEffectiveClustersNumberFile {
-    publishDir params.data.path
+    publishDir "${params.output_dir}", mode: "copy", overwrite: true
     errorStrategy 'ignore'
 
     input:
     val ready
     path clusterfile
+    path sols
 
     output:
     path "eff_nr_${clusterfile.Name}.npy"
@@ -68,10 +69,9 @@ process ConvertSagecalGlobalSolutions {
     script:
     logs = "${params.logs_dir}/convert_Zsols_${obsid}.log"
     """
-    mv ${datapath}/*Zsol ${solsdir}
+    mv ${datapath}/*Zsol ${solsdir} || true
 
     python3 ${projectDir}/templates/convert_sage_zsol.py --output_name ${obsid}_zsol --eff_nr ${eff_nr_file} ${solsdir}/sagecal_Zsol ${solsdir}/${obsid}.npz > ${logs} 2>&1
-
     """
 }
 
