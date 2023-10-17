@@ -466,8 +466,18 @@ workflow SAGECAL_MPI_DD {
         cp_ch = GetModels(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
         dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
-        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
-        ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
+        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
+        add_dd_model_ch = AddDDModelColumnToMeasurementSet(SagecalMPI.out, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.input_column, params.mpi_dd.output_column, 'DD_MODEL')
+
+        //We want to make images of the DD residuals and the DD model at low and high resolutions respectively
+        //They will be made sequentially by specifying `maxfork 1' inside ImageWithWSClean process
+        columns_to_image = Channel.of(params.mpi_dd.output_column, 'DD_MODEL')
+        image_names = Channel.of("${params.wsclean.dir}_DD_RESIDUALS", "${params.wsclean.dir}_DD_MODEL")
+        max_uv_lambda_cuts = Channel.of(params.wsclean.maxuv_lambda, 5000)
+
+        ImageWithWSClean(add_dd_model_ch.collect(), params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_003.txt")
+
+        // ImageWithWSClean(add_dd_model_ch.collect(), params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
         SagecalMPI.out
 }
@@ -782,6 +792,54 @@ process AddColumnToMeasurementSet {
 
 
 /*
+A task to add a DD model column to a measurement set buy subtracting the corrected data (residuals) from uncalibrated data
+calls `${projectDir}/modules/add_ms_col.nf` using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+column: string
+    Name of the column to be added
+    
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
+process AddDDModelColumnToMeasurementSet {
+    debug true
+
+    input:
+    val ready
+    val pssh_hosts_txt_file
+    val datapath
+    val ms_files
+    val data_col
+    val corrected_col
+    val model_col
+  
+
+    output:
+    val true
+
+    script:
+
+    """
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${projectDir}/modules/add_model_col.nf --ms_files ${ms_files} --datacol ${data_col} --correctedcol ${corrected_col} --modelcol ${model_col} > ${params.logs_dir}/add_model_column.log 2>&1
+    """
+}
+
+/*
 A task to apply pre-DD flagging on the data 
 Spawns a standalone nextflow job on each node using PSSH
 
@@ -1080,8 +1138,7 @@ true : bool
 
 */
 process ImageWithWSClean { 
-    publishDir "${params.data.path}/${name}_images", pattern: "*.fits", mode: "move", overwrite: true
-    publishDir "${params.data.path}/${name}_images", pattern: "*.png", mode: "move", overwrite: true
+    maxForks 1
 
     input:
     val ready
