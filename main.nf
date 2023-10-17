@@ -477,11 +477,13 @@ workflow SAGECAL_MPI_DD {
 
         //We want to make images of the DD residuals and the DD model at low and high resolutions respectively
         //They will be made sequentially by specifying `maxfork 1' inside ImageWithWSClean process
+        scales = Channel.of(params.wsclean.scale, '0.2amin')
+        sizes = Channel.of(params.wsclean.size, 6000)
         columns_to_image = Channel.of(params.mpi_dd.output_column, 'DD_MODEL')
         image_names = Channel.of("${params.wsclean.dir}_DD_RESIDUALS", "${params.wsclean.dir}_DD_MODEL")
         max_uv_lambda_cuts = Channel.of(params.wsclean.maxuv_lambda, 5000)
 
-        ImageWithWSClean(add_dd_model_ch.collect(), params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_003.txt")
+        ImageWithWSClean(add_dd_model_ch.collect(), scales, sizes, params.wsclean.weight, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_003.txt")
 
         // ImageWithWSClean(add_dd_model_ch.collect(), params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
     emit:
