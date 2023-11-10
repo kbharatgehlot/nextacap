@@ -5,7 +5,9 @@ import numpy as np
 import sys
 import os
 
-parser = ArgumentParser("add the the direction dependent model data column to measurement sets by subtracting the calibrated data residuals column from the uncalibrated data column")
+parser = ArgumentParser(
+    "add the the direction dependent model data column to measurement sets by subtracting the calibrated data residuals column from the uncalibrated data column"
+)
 parser.add_argument(
     "-i",
     "--MSlist",
@@ -37,7 +39,6 @@ parser.add_argument(
 )
 
 
-
 def main(argv):
     args = parser.parse_args(argv)
 
@@ -57,6 +58,10 @@ def main(argv):
     MSlist = MSlists[0]
     for ms in MSlist:
         myt = pt.table(ms, readonly=False)
+
+        if model_colname in myt.colnames():
+            myt.removecols(model_colname)
+            print(f"MS already has {model_colname} column. Removing it first")
 
         data = myt.getcol(data_colname)
         corrected_data = myt.getcol(corrected_colname)
