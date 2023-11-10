@@ -26,13 +26,6 @@ parser.add_argument(
     "-c", "--column", help="column default=DATA", dest="column", default="DATA"
 )
 parser.add_argument(
-    "-o",
-    "--outputcolumn",
-    help="out put column default=MODEL_DATA",
-    dest="outputcolumn",
-    default="MODEL_DATA",
-)
-parser.add_argument(
     "-r", "--reset_flags", help="set all flags to false", action="store_true"
 )
 parser.add_argument(
@@ -124,20 +117,11 @@ def main(argv):
                 nflags = np.abs(data[:, :, :]) > args.clipvalue
                 # data[nflags]=args.clipvalue
                 flags = np.logical_or(nflags, flags)
-                print("flagging", np.sum(nflags) / 4, "data points")
+                print(
+                    "flagging", np.sum(nflags) / 4, "data points"
+                )  # check these statistics of flagged data
                 myt = tab.table(i, readonly=False)
                 myt.putcol("FLAG", flags)
-                if not "MODEL_DATA" in myt.colnames():
-                    ddesc = myt.getcoldesc("DATA")
-                    ddesc["name"] = "MODEL_DATA"
-                    myt.addcols(ddesc)
-                    myt.putcol("MODEL_DATA", data)
-                if not "CORRECTED_DATA" in myt.colnames():
-                    ddesc = myt.getcoldesc("DATA")
-                    ddesc["name"] = "CORRECTED_DATA"
-                    myt.addcols(ddesc)
-                    myt.putcol("CORRECTED_DATA", data)
-                # myt.putcol(args.outputcolumn,data)
                 myt.flush()
 
 
