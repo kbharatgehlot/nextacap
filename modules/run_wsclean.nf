@@ -12,10 +12,21 @@ params.minuv_lambda=null
 params.maxuv_lambda=null
 params.polarisation=null
 params.threads=null
-params.output_column=null
+params.data_column=null
 params.name=null
 params.mslist=null
 params.extra_options=null
+// gridder #wgridder --wgridder-accuracy
+// data column
+// memory
+// re-order
+// make-psf
+// no-dirty #whether to create a dirty image
+// padding
+// channels-out
+// interval
+// even-odd-timesteps
+// channel-range
 
 /*
 A task to run wsclean

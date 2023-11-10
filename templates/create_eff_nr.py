@@ -4,9 +4,9 @@ import sys
 from argparse import ArgumentParser
 parser = ArgumentParser("Convert sage solutions to numpy, create file with eff _nr");
 
-parser.add_argument('--eff_nr', help='eff solution file',default = "eff_nr.npy")
-parser.add_argument('-c','--cluster_file', help='sagecal cluster file',dest='cluster_file',default="/home/users/mevius/pipeline/MODELS/sky_sagecal.txt.cluster")
 
+parser.add_argument('-c','--cluster_file', help='sagecal cluster file',dest='cluster_file')
+parser.add_argument('--eff_nr', help='output effective solutions file',default = "eff_nr.npy")
 
 def main(argv):
     args=parser.parse_args(argv)

@@ -28,7 +28,7 @@ process runSagecalStandalone {
     errorStrategy 'retry'
     maxRetries 4
     
-    publishDir "${params.outdir}/bandpass_logs", pattern: "*bandpass.log", mode: "move", overwrite: true
+    publishDir "${params.outdir}/bandpass_logs_per_MS", pattern: "*bandpass.log", mode: "move", overwrite: true
     publishDir "${solsdir}", pattern: "*.solutions", mode: "move", overwrite: true
     label 'parallel_jobs'
 

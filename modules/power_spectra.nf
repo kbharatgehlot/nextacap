@@ -1,10 +1,9 @@
 #!/usr/bin/env nextflow
-
-params.datapath = "/data/users/lofareor/chege/psp/test" //null
-params.revision="rev001" //null
-params.obsid="L254871" //null
-params.msfiles = "/data/users/lofareor/chege/psp/ms_files.txt" //null
-params.nodes = "node129" //"node[125-129]"
+params.datapath = null
+params.revision=null //"rev001" //null
+params.obsid=null // "L254871" //null
+params.msfiles = null
+params.nodes =null //"node129" //"node[125-129]"
 params.max_concurrent=15
 params.data_column="DATA"
 params.pspipe_dir=null
@@ -135,6 +134,7 @@ process RunPSPIPE {
     val vis_flag
     val gpr
     val ml_gpr
+    val pslogs
 
     output:
     val true, emit: ready
@@ -152,35 +152,33 @@ process RunPSPIPE {
     psdb add_obs !{toml_file} !{obsid} -m !{msfiles}
     obs="!{obsid}"
 
-    mkdir -p !{launchDir}/logs
+    mkdir -p !{pslogs}
 
     if !{merge_ms}; then
         echo "Merging Ms files"
         if !{delay_flag}; then
             echo "Using delay flagger"
-            pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_delay_flagger.log 2>&1
+            pspipe merge_ms,delay_flagger !{toml_file} !{obsid} > !{pslogs}/ps_ms_merging_with_aoflagger_and_delay_flagger.log 2>&1
         elif !{vis_flag}; then
-            pspipe merge_ms,vis_flagger !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_with_aoflagger_and_vis_flagger.log 2>&1
+            pspipe merge_ms,vis_flagger !{toml_file} !{obsid} > !{pslogs}/ps_ms_merging_with_aoflagger_and_vis_flagger.log 2>&1
         else
-            pspipe merge_ms !{toml_file} !{obsid} > !{launchDir}/logs/ps_ms_merging_aoflagger_only.log 2>&1
+            pspipe merge_ms !{toml_file} !{obsid} > !{pslogs}/ps_ms_merging_aoflagger_only.log 2>&1
         fi
 
         obs="!{obsid}_flagged"
     fi
     echo "making image cube"
-    pspipe image,gen_vis_cube !{toml_file} ${obs} > !{launchDir}/logs/ps_image_gen_vis_cube.log 2>&1
+    pspipe image,gen_vis_cube !{toml_file} ${obs} > !{pslogs}/ps_image_gen_vis_cube.log 2>&1
 
     if !{ml_gpr}; then
         echo "Running foreground subtraction with ML_GPR"
-        pspipe run_ml_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_ml_gpr.log 2>&1
+        pspipe run_ml_gpr !{toml_file} ${obs} > !{pslogs}/ps_ml_gpr.log 2>&1
     elif !{gpr}; then
         echo "Running foreground subtraction with GPR"
-        pspipe run_gpr !{toml_file} ${obs} > !{launchDir}/logs/ps_gpr.log 2>&1
+        pspipe run_gpr !{toml_file} ${obs} > !{pslogs}/ps_gpr.log 2>&1
     else
         echo "GPR foreground subtraction NOT applied"
     fi
-
-    # python3 !{projectDir}/templates/plot_power_spctrum.py !{toml_file} --obsid ${obs} --outdir !{ps_dir} > !{launchDir}/logs/plot_ps.log 2>&1
 
     '''
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env nextflow
 
+//Welcome
+welcomeBanner()
+
 // Show help message and exit
 if (params.help) {
     helpMessage()
@@ -35,9 +38,12 @@ PRODUCTION_PIPELINE_FROM_DD="standard,mpi_dd,gains,ps,wsclean"
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                         // INITIALIZATION Workflow //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+params.output_dir = "${params.data.path}/results"
 workflow Initialise {
     VET_PARAMS()
+
+    params.cluster.mpirun_hosts_txt_file = "${params.logs_dir}/mpirun_hosts_list.txt"
+    params.cluster.pssh_hosts_txt_file = "${params.logs_dir}/pssh_hosts_list.txt"
     SET_NODES(VET_PARAMS.out)
 }
 
@@ -357,10 +363,7 @@ workflow VET_PARAMS {
         //All params are available now
         SavingParams(params_valid)
 
-        //only show params info after validating all params //TODO:
-        // if (params.verbose){
-        //     paramsInfo()
-        // }
+
 
     emit:
         SavingParams.out.params_json_written
@@ -409,16 +412,34 @@ workflow SAGECAL_MPI_DI {
         cp_ch = GetModels(gen_002_ready, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.mpi_di.output_column)
         di_preprocess_ch = ApplyPreDIFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_di.preprocessing_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.sim)
-        sage_mpi_di_ch = SagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_di.solsdir}", params.mpi_di.ms_pattern)
+        sage_mpi_di_ch = SagecalMPI(di_preprocess_ch.collect(), params.mpi_di.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${params.mpi_di.solsdir}", params.mpi_di.ms_pattern)
 
-        eff_ch = MakeEffectiveClustersNumberFile(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file)
 
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path, params.mpi_di.stage_number)
+        add_di_model_ch = AddModelColumn(sage_mpi_di_ch.sagecal_complete, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.mpi_di.input_column, params.mpi_di.output_column, 'DI_MODEL')
 
-        ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path)
-        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
+
+        //We want to make images of the BP corrected data and the BP model model data at low and high resolutions respectively
+        //They will be made sequentially by specifying `maxfork 1' inside ImageWithWSClean process
+        scales = Channel.of(params.wsclean.wide_low_res.scale, params.wsclean.narrow_high_res.scale)
+        sizes = Channel.of(params.wsclean.wide_low_res.size, params.wsclean.narrow_high_res.size)
+        max_uv_lambda_cuts = Channel.of(params.wsclean.wide_low_res.maxuv_lambda, params.wsclean.narrow_high_res.maxuv_lambda)
+        weights = Channel.of(params.wsclean.wide_low_res.weight, params.wsclean.narrow_high_res.weight)
+
+        columns_to_image = Channel.of(params.mpi_di.output_column, 'DI_MODEL')
+        image_names = Channel.of("${params.wsclean.dir}_${params.wsclean.di_corrected_image_name}", "${params.wsclean.dir}_${params.wsclean.di_model_image_name}")
+        
+
+        ImageWithWSClean(add_di_model_ch.collect(), scales, sizes, weights, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_002.txt")
+
+        eff_ch = MakeEffectiveClustersNumberFile(sage_mpi_di_ch.sagecal_complete, params.mpi_di.clusters_file, "${params.output_dir}/${params.mpi_di.solsdir}")
+
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.mpi_di.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${params.mpi_di.solsdir}", params.data.path, params.mpi_di.stage_number)
+
+        ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.output_dir}/${params.mpi_di.solsdir}", params.data.path)
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.output_dir}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
     emit:
-        PlotSagecalDISolutions.out
+        // PlotSagecalDISolutions.out
+        ImageWithWSClean.out[0]
 }
 
 
@@ -429,19 +450,38 @@ workflow SAGECAL_BANDPASS {
     main:
         add_cols_ch = AddColumnToMeasurementSet(sage_mpi_di_done, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.output_column)
 
-        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", "${params.data.path}/${params.bandpass.solsdir}", params.bandpass.time_limit)
+        bandpass_ch = SagecalStandalone(add_cols_ch.collect(), params.bandpass.sagecal_command, params.cluster.pssh_hosts_txt_file, params.data.path, params.bandpass.nf_module, "${params.data.path}/ms_files_002.txt", "${params.output_dir}/${params.bandpass.solsdir}", params.bandpass.time_limit)
 
-        wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
 
-        eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file) //wsc_ch.wsclean_complete
+        add_bp_model_ch = AddModelColumn(bandpass_ch.sagecal_complete, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_002.txt", params.bandpass.input_column, params.bandpass.output_column, 'BANDPASS_MODEL')
 
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.bandpass.solsdir}", params.data.path, params.bandpass.stage_number)
 
-        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
+        //We want to make images of the BP corrected data and the BP model model data at low and high resolutions respectively
+        //They will be made sequentially by specifying `maxfork 1' inside ImageWithWSClean process
+        scales = Channel.of(params.wsclean.wide_low_res.scale, params.wsclean.narrow_high_res.scale)
+        sizes = Channel.of(params.wsclean.wide_low_res.size, params.wsclean.narrow_high_res.size)
+        max_uv_lambda_cuts = Channel.of(params.wsclean.wide_low_res.maxuv_lambda, params.wsclean.narrow_high_res.maxuv_lambda)
+        weights = Channel.of(params.wsclean.wide_low_res.weight, params.wsclean.narrow_high_res.weight)
+
+        columns_to_image = Channel.of(params.bandpass.output_column, 'BANDPASS_MODEL')
+        image_names = Channel.of("${params.wsclean.dir}_${params.wsclean.bp_corrected_image_name}", "${params.wsclean.dir}_${params.wsclean.bp_model_image_name}")
+        
+
+        ImageWithWSClean(add_bp_model_ch.collect(), scales, sizes, weights, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_002.txt")
+
+        
+        // wsc_ch = ImageWithWSClean(bandpass_ch.sagecal_complete, params.wsclean.wide_low_res.scale, params.wsclean.wide_low_res.size, params.wsclean.wide_low_res.weight, params.wsclean.minuv_lambda, params.wsclean.wide_low_res.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.bandpass.output_column, "${params.wsclean.dir}_DI", "${params.data.path}/all_ms_files_002.txt")
+
+        eff_ch = MakeEffectiveClustersNumberFile(bandpass_ch.sagecal_complete, params.bandpass.clusters_file, "${params.output_dir}/${params.bandpass.solsdir}") //wsc_ch.wsclean_complete
+
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params.bandpass.ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${params.bandpass.solsdir}", params.data.path, params.bandpass.stage_number)
+
+        PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.output_dir}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
 
 
     emit:
-        PlotSagecalDISolutions.out
+        // PlotSagecalDISolutions.out
+        ImageWithWSClean.out[0]
 }
 
 
@@ -466,8 +506,19 @@ workflow SAGECAL_MPI_DD {
         cp_ch = GetModels(gen_003_complete, params.cluster.pssh_hosts_txt_file, params.shapelets.modes, params.data.path, params.sim)
         add_cols_ch = AddColumnToMeasurementSet(cp_ch.collect(), params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.output_column)
         dd_preprocess_ch = ApplyPreDDFlag(add_cols_ch.collect(), params.cluster.pssh_hosts_txt_file, params.mpi_dd.preprocessing_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.sim)
-        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
-        ImageWithWSClean(SagecalMPI.out, params.wsclean.scale, params.wsclean.size, params.wsclean.weight, params.wsclean.minuv_lambda, params.wsclean.maxuv_lambda, params.wsclean.polarisation, params.wsclean.threads, params.mpi_dd.output_column, "${params.wsclean.dir}_DD", "${params.data.path}/all_ms_files_003.txt")
+        SagecalMPI(dd_preprocess_ch.collect(), params.mpi_dd.sagecal_command, params.data.path, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${params.mpi_dd.solsdir}", params.mpi_dd.ms_pattern)
+        add_dd_model_ch = AddModelColumn(SagecalMPI.out, params.cluster.pssh_hosts_txt_file, params.data.path, "${params.data.path}/ms_files_003.txt", params.mpi_dd.input_column, params.mpi_dd.output_column, 'DD_MODEL')
+
+        //We want to make images of the DD residuals and the DD model at low and high resolutions respectively
+        //They will be made sequentially by specifying `maxfork 1' inside ImageWithWSClean process
+        scales = Channel.of(params.wsclean.wide_low_res.scale, params.wsclean.narrow_high_res.scale)
+        sizes = Channel.of(params.wsclean.wide_low_res.size, params.wsclean.narrow_high_res.size)
+        columns_to_image = Channel.of(params.mpi_dd.output_column, 'DD_MODEL')
+        image_names = Channel.of("${params.wsclean.dir}_${params.wsclean.dd_residual_image_name}", "${params.wsclean.dir}_${params.wsclean.dd_model_image_name}")
+        max_uv_lambda_cuts = Channel.of(params.wsclean.wide_low_res.maxuv_lambda, params.wsclean.narrow_high_res.maxuv_lambda)
+
+        ImageWithWSClean(add_dd_model_ch.collect(), scales, sizes, params.wsclean.wide_low_res.weight, params.wsclean.minuv_lambda, max_uv_lambda_cuts, params.wsclean.polarisation, params.wsclean.threads, columns_to_image, image_names, "${params.data.path}/all_ms_files_003.txt")
+
     emit:
         SagecalMPI.out
 }
@@ -481,22 +532,23 @@ workflow ANALYSE_GAINS {
 
     main:
 
-        eff_ch = MakeEffectiveClustersNumberFile(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file)
+        
         solsdir = params."${gains_type}".solsdir
-        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.data.path}/${solsdir}", params.data.path, params."${gains_type}".stage_number)
+        eff_ch = MakeEffectiveClustersNumberFile(sagecal_mpi_dd_complete, params."${gains_type}".clusters_file, "${params.output_dir}/${solsdir}")
+        conv_ch = ConvertSagecalSolutions(eff_ch, params.data.obsid, params."${gains_type}".ms_pattern, params.cluster.nodes, params.cluster.pssh_hosts_txt_file, "${params.output_dir}/${solsdir}", params.data.path, params."${gains_type}".stage_number)
 
 
         if (gains_type=="mpi_di") {
-            ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.data.path)
-            PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
+            ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${workflow.runName}${workflow.runName}/${params.mpi_di.solsdir}", params.data.path)
+            PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.output_dir}/${workflow.runName}/${params.mpi_di.solsdir}", params.gains.fmin, params.gains.fmax)
         }
         else if (gains_type=="mpi_dd") {
-                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.data.path)
-                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.mpi_dd.solsdir}", params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
+                ConvertSagecalGlobalSolutions(conv_ch.ready, eff_ch, params.data.obsid, "${params.output_dir}/${params.mpi_dd.solsdir}", params.data.path)
+                PlotSagecalDDSolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.output_dir}/${params.mpi_dd.solsdir}", params.gains.fmin, params.gains.fmax, params.gains.dd_clusters_to_plot, params.gains.dd_cluster_names, params.gains.stations_to_plot)
             }
 
         else if (gains_type=="bandpass") {
-                PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.data.path}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
+                PlotSagecalDISolutions(conv_ch.npy, conv_ch.npz, eff_ch, params.data.obsid, "${params.output_dir}/${params.bandpass.solsdir}", params.gains.fmin, params.gains.fmax)
             }
 }
 
@@ -507,9 +559,9 @@ workflow POWER_SPECTRUM {
 
     main:
         // init_ch = InitPSDB(sagecal_complete, params.data.path)
-        ps_dir = "${params.data.path}/${params.pspipe.dir}"
+        ps_dir = "${params.output_dir}/${params.pspipe.dir}"
         rev_ch = AddRevision(sagecal_complete, params.data.obsid, params.mpi_dd.output_column, params.data.path, ps_dir, nodes_list[-1], params.pspipe.max_concurrent, params.pspipe.revision, params.pspipe.merge_ms, params.pspipe.aoflag_after_merge_ms) // TODO: stop using only the final node 
-        ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flagger, params.pspipe.vis_flagger, params.pspipe.gpr, params.pspipe.ml_gpr)
+        ps_ch = RunPSPIPE(ps_dir, rev_ch.toml_file, params.data.obsid, "${params.data.path}/all_ms_files_003.txt", params.pspipe.merge_ms, params.pspipe.delay_flagger, params.pspipe.vis_flagger, params.pspipe.gpr, params.pspipe.ml_gpr, params.logs_dir)
         // PlotPowerSpectrum(ps_ch.ready, params.pspipe.dir, rev_ch.toml_file, params.data.obsid)
 }
 
@@ -782,6 +834,54 @@ process AddColumnToMeasurementSet {
 
 
 /*
+A task to add a DD model column to a measurement set buy subtracting the corrected data (residuals) from uncalibrated data
+calls `${projectDir}/modules/add_ms_col.nf` using PSSH
+
+Parameters
+----------
+ready : string
+    A `go-ahead` signal/connector to a previous task
+pssh_hosts_txt_file : path
+    pssh input nodes list file
+datapath : string
+    A path to the directory containing the measurement sets
+    It is assumed to be the same for all the nodes used
+ms_files: path
+    A path to a file listing all the measurement sets in a node
+    Should exist for each node separately
+column: string
+    Name of the column to be added
+    
+Returns
+-------
+true : bool
+    The task was successful
+
+*/
+process AddModelColumn {
+    debug true
+
+    input:
+    val ready
+    val pssh_hosts_txt_file
+    val datapath
+    val ms_files
+    val data_col
+    val corrected_col
+    val model_col
+  
+
+    output:
+    val true
+
+    script:
+
+    """
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${projectDir}/modules/add_model_col.nf --ms_files ${ms_files} --datacol ${data_col} --correctedcol ${corrected_col} --modelcol ${model_col} > ${params.logs_dir}/add_model_column.log 2>&1
+    """
+}
+
+/*
 A task to apply pre-DD flagging on the data 
 Spawns a standalone nextflow job on each node using PSSH
 
@@ -983,7 +1083,7 @@ process SagecalStandalone {
 
     script:
     """
-    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --time_limit ${time_limit} --command "'${command}'"  > ${params.logs_dir}/sagecal_standalone.log 2>&1
+    pssh -v -i -h ${pssh_hosts_txt_file} -t 0 -x "cd ${datapath}; bash" ${params.nextflow_executable} run ${standalone_sage_nf_file} --ms_files ${ms_files} --solsdir ${solsdir} --outdir ${params.logs_dir} --time_limit ${time_limit} --command "'${command}'"  > ${params.logs_dir}/sagecal_bandpass.log 2>&1
     """
 }
 
@@ -1080,8 +1180,9 @@ true : bool
 
 */
 process ImageWithWSClean { 
-    publishDir "${params.data.path}/${name}_images", pattern: "*.fits", mode: "move", overwrite: true
-    publishDir "${params.data.path}/${name}_images", pattern: "*.png", mode: "move", overwrite: true
+    publishDir "${params.output_dir}/${name}_images", pattern: "*.fits", mode: "move", overwrite: true
+    publishDir "${params.output_dir}/${name}_images", pattern: "*.png", mode: "move", overwrite: true
+    maxForks 1
 
     input:
     val ready
@@ -1529,6 +1630,19 @@ def writeListToTxt (txt_file_name, list_of_strings) {
 }
 
 
+def welcomeBanner(){
+    log.info """
+        [nextleap]: Version        :v${params.manifest.version}
+        [nextleap]: Author         : ${params.manifest.author}
+
+        [nextleap]: mnemonic       : ${workflow.runName}
+        [nextleap]: started at     : ${workflow.start}
+        [nextleap]: config files   : ${workflow.configFiles}
+        [nextleap]: run as         : ${workflow.commandLine}
+         """
+         .stripIndent()
+}
+
 def helpMessage() {
 log.info """
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -1547,7 +1661,7 @@ DESCRIPTION!
         9: ps
     Different tasks combination can also be used.
     However, the possibilities supported might not be exhaustive.
-    Let us know if your disired pcombination is not covered.
+    Let us know if your disired combination is not covered.
     For sugestions/questions talk to the author of NextLEAP
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 
@@ -1556,7 +1670,7 @@ TYPICAL USAGE COMMAND:
     This pipeline runs in 2 commands:
 
     |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-    |nextflow run main.nf -profile standard,gen002vis,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps --data.obsid L254871 --data.path /path/to/MS/files/ --data.label R --cluster.nodes 126,127,128,129 -entry init      |
+    |nextflow run main.nf -profile standard,gen002vis,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps --data.obsid L254871 --data.path /path/to/MS/files/ --data.label R --cluster.nodes 126,127,128,129 --init           |
     |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
     |nextflow run main.nf -profile standard,gen002vis,mpi_di,mpi_dd,bandpass,gains,gen003vis,wsclean,ps -params-file logs/params.json                                                                                       |
     |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -1582,6 +1696,5 @@ MANDATORY ARGUMENTS:
 OPTIONAL ARGUMENTS:
     --help                          Display this usage statement, and exit.
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-
 """
 }

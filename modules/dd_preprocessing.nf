@@ -12,9 +12,10 @@ process clipData {
 
     output:
     val ms
-
+    // This is only done because sagecal does not like these outlying visibilities
+    // Always check the clip data statistics
     """
-    python3 /home/users/chege/theleap/leap/templates/clip_data.py -i ${ms} --flag_intrastations --flag_badbaselines -o DATA
+    python3 /home/users/chege/theleap/leap/templates/clip_data.py -i ${ms} -o DATA
     """
 }
 

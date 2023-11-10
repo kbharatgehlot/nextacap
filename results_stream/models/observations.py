@@ -73,7 +73,7 @@ class Config:
         self.master_node = self.config["cluster"]["masternode"]
         # data directory
         self.data_directory = (
-            f"/net/{self.config['cluster']['masternode']}/{self.config['data']['path']}"
+            f"/net/{self.config['cluster']['masternode']}/{self.config['data']['path']}/results"
         )
 
         if "mpi_di" in self.tasks:

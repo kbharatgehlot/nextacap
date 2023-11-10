@@ -122,7 +122,7 @@ def main(argv):
 
         assert (
             len(myl) > 0
-        ), f"No solutions files found on node {inode} at {args.indir}. \n Looked for {fnames}"
+        ), f"No solutions files found on node {inode} at {args.indir}. \nLooked for {fnames}"
 
         for fname in myl:
             print(inode, fname)
